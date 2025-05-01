@@ -308,7 +308,7 @@ export const eventsApi = createApi({
           const result = await queryFulfilled;
           console.log("[eventsApi] HTTP fetch result:", result);
 
-          return;
+          // return; // Commented out: Was making the below code unreachable
 
           // If we have initial events, process them for the graph state
           if (result.data.events) {

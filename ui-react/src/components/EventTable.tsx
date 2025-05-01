@@ -8,6 +8,7 @@ import { pushModal } from '../features/ui/modalStackSlice';
 import { formatTimestamp, RenderClickableNodeId } from '../helpers/formatters.tsx'; // Use shared formatter
 import EventTypeBadge from './EventTypeBadge.tsx'; // Use shared badge
 import EventPayloadDetails from './EventPayloadDetails.tsx'; // Use shared details renderer
+import ErrorBoundary from './ErrorBoundary'; // Import the error boundary component
 
 // Helper function to extract common IDs or return N/A
 const getEventStep = (event: AgentEvent): number | string => {
@@ -385,7 +386,9 @@ const EventTable: React.FC = () => {
                                         />
                                     </td>
                                     <td className="px-3 py-2 text-muted small text-start">
-                                        <EventPayloadDetails event={event} onNodeClick={handleNodeClick} showCallIds={true} />
+                                        <ErrorBoundary>
+                                            <EventPayloadDetails event={event} onNodeClick={handleNodeClick} showCallIds={true} />
+                                        </ErrorBoundary>
                                     </td>
                                 </tr>
                             );

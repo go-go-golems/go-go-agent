@@ -4,7 +4,31 @@ import { AgentEvent } from '../features/events/eventsApi';
 import { isEventType } from '../helpers/eventType';
 import { statusColorMap } from '../helpers/eventConstants';
 import { RenderClickableNodeId } from '../helpers/formatters'; // Import the component
-import CodeHighlighter from './CodeHighlighter';
+import CodeHighlighter from './SyntaxHighlighter';
+import ErrorBoundary from './ErrorBoundary';
+import SimpleCodeFallback from './SimpleCodeFallback';
+
+/**
+ * Safely converts a value to a string for display
+ * @param value Value that needs to be displayed safely
+ * @param prettyJson Whether to format as pretty JSON
+ */
+const safeDisplayValue = (value: unknown, prettyJson = true): string => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  
+  if (typeof value === 'string') {
+    return value;
+  }
+  
+  try {
+    return prettyJson ? JSON.stringify(value, null, 2) : JSON.stringify(value);
+  } catch (e) {
+    console.error('Failed to stringify value:', e);
+    return '[Error: Unable to display value]';
+  }
+};
 
 interface EventPayloadDetailsProps {
   event: AgentEvent;
@@ -139,19 +163,45 @@ const EventPayloadDetails: React.FC<EventPayloadDetailsProps> = ({ event, onNode
     }
 
     if (isEventType("node_result_available")(event)) {
+        // Extract a preview of the result safely
+        let resultPreview = "";
+        
+        try {
+            resultPreview = event.payload.result_summary ? 
+                (typeof event.payload.result_summary === 'string' ? 
+                    event.payload.result_summary.substring(0, 100) + "..." : 
+                    safeDisplayValue(event.payload.result_summary, false).substring(0, 100) + "...") : 
+                "(empty result)";
+        } catch (e) {
+            resultPreview = "(error displaying result)";
+            console.error("Error formatting result preview:", e);
+        }
+        
         return (
             <div className={`text-truncate ${className}`} style={{ maxWidth: '500px' }}>
                 Action: <span className="fw-medium">{event.payload.action_name}</span>,
-                Result: <span className="text-muted small">{event.payload.result_summary.substring(0, 100)}...</span>
+                Result: <span className="text-muted small">
+                    <ErrorBoundary 
+                        fallback={SimpleCodeFallback}
+                        contentForFallback={resultPreview}
+                    >
+                        {resultPreview}
+                    </ErrorBoundary>
+                </span>
             </div>
         );
     }
 
     // Fallback for unknown event types
     return (
-        <pre className={`text-muted small ${className}`} style={{ maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.85em', margin: 0 }}>
-            {JSON.stringify(event.payload, null, 2)}
-        </pre>
+        <ErrorBoundary 
+            fallback={SimpleCodeFallback}
+            contentForFallback={safeDisplayValue(event.payload)}
+        >
+            <pre className={`text-muted small ${className}`} style={{ maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.85em', margin: 0 }}>
+                {safeDisplayValue(event.payload)}
+            </pre>
+        </ErrorBoundary>
     );
 }
 

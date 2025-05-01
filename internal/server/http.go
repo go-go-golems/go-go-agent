@@ -16,6 +16,45 @@ import (
 	"github.com/go-go-golems/go-go-agent/internal/state"
 )
 
+// --- Helper type for EntityState structure ---
+type entityState struct {
+	IDs      []string               `json:"ids"`
+	Entities map[string]interface{} `json:"entities"`
+}
+
+// Helper function to create an EntityState from a map
+func newEntityState(dataMap interface{}) entityState {
+	ids := []string{}
+	entities := map[string]interface{}{}
+
+	switch v := dataMap.(type) {
+	case map[string]*state.GraphNode:
+		for id, node := range v {
+			ids = append(ids, id)
+			entities[id] = node
+		}
+	case map[string]*state.GraphEdge:
+		for id, edge := range v {
+			ids = append(ids, id)
+			entities[id] = edge
+		}
+		// Add cases for other types if necessary
+	default:
+		// Handle unexpected types or return empty state
+		// log.Printf("Warning: Unexpected type in newEntityState: %T", dataMap)
+	}
+
+	// Optionally sort IDs for consistency, though not strictly required by RTK
+	// sort.Strings(ids)
+
+	return entityState{
+		IDs:      ids,
+		Entities: entities,
+	}
+}
+
+// --- End Helper ---
+
 // HTTPServerConfig contains all configuration for the HTTP server
 type HTTPServerConfig struct {
 	ListenAddr     string
@@ -178,15 +217,20 @@ func (s *HTTPServer) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, response)
 }
 
-// handleGetGraph returns the complete graph from the GraphManager
+// handleGetGraph returns the complete graph from the GraphManager in EntityState format
 func (s *HTTPServer) handleGetGraph(w http.ResponseWriter, r *http.Request) {
-	nodes := s.graphManager.GetNodes()
-	edges := s.graphManager.GetEdges()
+	// Get raw maps from the manager
+	rawNodes := s.graphManager.GetNodes()
+	rawEdges := s.graphManager.GetEdges()
+
+	// Convert maps to EntityState structure
+	nodesState := newEntityState(rawNodes)
+	edgesState := newEntityState(rawEdges)
 
 	response := map[string]interface{}{
 		"graph": map[string]interface{}{
-			"nodes": nodes,
-			"edges": edges,
+			"nodes": nodesState,
+			"edges": edgesState,
 		},
 	}
 

@@ -34,11 +34,11 @@ export default function App() {
             <EventTable />
           </ErrorBoundary>
         </Tab>
-        <Tab eventKey="task-graph" title="Task Graph">
-          <ErrorBoundary>
-            <GraphCanvas />
-          </ErrorBoundary>
-        </Tab>
+        {/* <Tab eventKey="task-graph" title="Task Graph"> */}
+        {/* <ErrorBoundary> */}
+        {/* <GraphCanvas /> */}
+        {/* </ErrorBoundary> */}
+        {/* </Tab> */}
       </Tabs>
       
       {/* Modal Manager handles all modal display and navigation */}

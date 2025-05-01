@@ -112,19 +112,23 @@ const slice = createSlice({
       .addCase(initializeGraphState.fulfilled, (state, action) => {
         state.loading = false;
 
-        // Only replace state if we got valid data
+        // Use adapter's setAll to correctly populate state from payload
         if (action.payload?.graph) {
-          // Extract nodes
           if (action.payload.graph.nodes) {
-            state.nodes = action.payload.graph.nodes;
+            // Use setAll for nodes
+            nodes.setAll(state.nodes, action.payload.graph.nodes);
           }
 
-          // Extract edges
           if (action.payload.graph.edges) {
-            state.edges = action.payload.graph.edges;
+            // Use setAll for edges
+            edges.setAll(state.edges, action.payload.graph.edges);
           }
 
           state.initialized = true;
+        } else {
+          // Handle case where payload is missing graph data (optional logging)
+          console.warn("initializeGraphState fulfilled but payload missing 'graph' key:", action.payload);
+          // You might want to set an error state here or just leave state as is
         }
       })
       .addCase(initializeGraphState.rejected, (state, action) => {

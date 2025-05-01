@@ -14,6 +14,10 @@ import (
 
 type ReactAgentFactory struct{}
 
+func NewReactAgentFactory() *ReactAgentFactory {
+	return &ReactAgentFactory{}
+}
+
 var _ AgentFactory = &ReactAgentFactory{}
 
 const ReactAgentType = "react"
@@ -96,9 +100,10 @@ Final Answer: the final answer to the original input question`,
 }
 
 // parseResponse parses the LLM response into thought, action, and action input
-func (a *ReActAgent) parseResponse(response string) (thought, action, actionInput string) {
+func (a *ReActAgent) parseResponse(response string) (string, string, string) {
 	lines := strings.Split(response, "\n")
 
+	var thought, action, actionInput string
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 

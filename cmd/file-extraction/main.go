@@ -120,8 +120,12 @@ func (fec *FileExtractionCmd) Run(ctx context.Context, parsedLayers *layers.Pars
 		return errors.Wrap(err, "failed to create Geppetto LLM")
 	}
 
-	// 4. Create the FileCollectionAgent
-	fec.Agent = agent.NewFileCollectionAgent(geppettoLLM, feSettings.MaxIterations)
+	// 4. Create an instance of FileCollectionAgentSettings
+	agentSettings := &agent.FileCollectionAgentSettings{
+		MaxIterations: feSettings.MaxIterations,
+	}
+	// Pass the settings to the NewFileCollectionAgent function
+	fec.Agent = agent.NewFileCollectionAgent(geppettoLLM, agentSettings)
 
 	// 5. Run the agent
 	log.Info().Str("prompt", feSettings.Prompt).Msg("Starting File Collection Agent")

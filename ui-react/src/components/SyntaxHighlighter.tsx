@@ -4,6 +4,7 @@ import {
   vscDarkPlus, 
   vs 
 } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import './styles.css'; // Make sure this is imported
 
 interface CodeHighlighterProps {
   code: string;
@@ -84,7 +85,7 @@ const CodeHighlighter: React.FC<CodeHighlighterProps> = ({
   };
   
   return (
-    <div className="code-highlighter" style={{ position: 'relative' }}>
+    <div className="code-highlighter-wrapper" style={{ position: 'relative' }}>
       {showCopyButton && (
         <button 
           className="copy-button"
@@ -105,7 +106,17 @@ const CodeHighlighter: React.FC<CodeHighlighterProps> = ({
           margin: 0,
           maxHeight,
           overflowY: 'auto',
+          overflowX: 'auto', // Ensure horizontal scrollbar appears if needed
+          whiteSpace: 'pre-wrap', // Add white-space property for better wrapping
+          wordBreak: 'break-word', // Break words when needed
+          wordWrap: 'break-word', // Legacy support for word wrapping
           ...style,
+        }}
+        codeTagProps={{
+          style: {
+            whiteSpace: 'pre-wrap', // Ensure code element itself also wraps
+            wordBreak: 'break-word',
+          }
         }}
       >
         {code}

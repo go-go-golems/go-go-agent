@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,6 +31,9 @@ var (
 	redisMaxRetries  int
 	redisDialTimeout time.Duration
 
+	// Transport selection
+	transportType string // Flag to choose "stream" or "pubsub"
+
 	// Stream subscription options
 	streamName        string
 	consumerGroup     string
@@ -40,6 +44,9 @@ var (
 	nackResendSleep   time.Duration
 	commitOffsetAfter time.Duration
 	ackWait           time.Duration
+
+	// Pub/Sub subscription options
+	topicPattern string
 
 	// Database options
 	dbPath string
@@ -71,16 +78,22 @@ func main() {
 	rootCmd.Flags().IntVar(&redisMaxRetries, "redis-max-retries", 3, "Maximum number of Redis connection retries")
 	rootCmd.Flags().DurationVar(&redisDialTimeout, "redis-dial-timeout", 5*time.Second, "Redis connection timeout")
 
+	// Add flag for transport type
+	rootCmd.Flags().StringVar(&transportType, "transport-type", string(redis.TransportStream), "Redis transport type (stream or pubsub)")
+
 	// Add flags for stream configuration
-	rootCmd.Flags().StringVar(&streamName, "stream-name", "agent_events", "Redis stream name to subscribe to")
-	rootCmd.Flags().StringVar(&consumerGroup, "consumer-group", "go_server_group", "Redis consumer group name")
-	rootCmd.Flags().StringVar(&consumerName, "consumer-name", "go_server_consumer", "Redis consumer name")
-	rootCmd.Flags().DurationVar(&claimMinIdleTime, "claim-min-idle-time", time.Minute, "Minimum idle time before claiming messages")
-	rootCmd.Flags().DurationVar(&blockTime, "block-time", time.Second, "Block time for Redis XREADGROUP")
-	rootCmd.Flags().DurationVar(&maxIdleTime, "max-idle-time", 5*time.Minute, "Maximum idle time for consumer")
-	rootCmd.Flags().DurationVar(&nackResendSleep, "nack-resend-sleep", 2*time.Second, "Sleep time before retrying NACK'd message")
-	rootCmd.Flags().DurationVar(&commitOffsetAfter, "commit-offset-after", 10*time.Second, "Interval between committing offsets")
+	rootCmd.Flags().StringVar(&streamName, "stream-name", "agent_events", "Redis stream name (used with transport-type=stream)")
+	rootCmd.Flags().StringVar(&consumerGroup, "consumer-group", "go_server_group", "Redis consumer group name (used with transport-type=stream)")
+	rootCmd.Flags().StringVar(&consumerName, "consumer-name", "go_server_consumer", "Redis consumer name (used with transport-type=stream)")
+	rootCmd.Flags().DurationVar(&claimMinIdleTime, "claim-min-idle-time", time.Minute, "Minimum idle time before claiming messages (used with transport-type=stream)")
+	rootCmd.Flags().DurationVar(&blockTime, "block-time", time.Second, "Block time for Redis XREADGROUP (used with transport-type=stream)")
+	rootCmd.Flags().DurationVar(&maxIdleTime, "max-idle-time", 5*time.Minute, "Maximum idle time for consumer (used with transport-type=stream)")
+	rootCmd.Flags().DurationVar(&nackResendSleep, "nack-resend-sleep", 2*time.Second, "Sleep time before retrying NACK'd message (used with transport-type=stream)")
+	rootCmd.Flags().DurationVar(&commitOffsetAfter, "commit-offset-after", 10*time.Second, "Interval between committing offsets (used with transport-type=stream)")
 	rootCmd.Flags().DurationVar(&ackWait, "ack-wait", 30*time.Second, "Time to wait for ACK before timing out")
+
+	// Add flags for Pub/Sub configuration
+	rootCmd.Flags().StringVar(&topicPattern, "topic-pattern", "agent_events:*", "Redis Pub/Sub topic pattern (used with transport-type=pubsub)")
 
 	// Add flag for database path
 	rootCmd.Flags().StringVar(&dbPath, "db-path", "./writehere.db", "Path to SQLite database file")
@@ -114,8 +127,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 	logger := zerolog.New(consoleWriter).With().Timestamp().Caller().Logger()
 	log.Logger = logger
 
+	// Validate transport type
+	selectedTransportType := redis.TransportType(transportType)
+	if selectedTransportType != redis.TransportStream && selectedTransportType != redis.TransportPubSub {
+		return fmt.Errorf("invalid transport type: %s, must be %s or %s",
+			transportType, redis.TransportStream, redis.TransportPubSub)
+	}
+
 	logger.Info().
 		Str("redis_url", redisURL).
+		Str("transport_type", transportType).
 		Str("db_path", dbPath).
 		Str("http_listen_addr", httpListenAddr).
 		Str("log_level", logLevel).
@@ -141,7 +162,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize database manager")
 	}
-	defer dbManager.Close()
+	defer func() {
+		if err := dbManager.Close(); err != nil {
+			logger.Error().Err(err).Msg("Error closing database manager")
+		}
+	}()
 
 	// Initialize state managers
 	eventManager := state.NewEventManager(logger, maxEventHistorySize)
@@ -281,15 +306,25 @@ func runServer(cmd *cobra.Command, args []string) error {
 	routerConfig.RedisDB = redisDB
 	routerConfig.RedisMaxRetries = redisMaxRetries
 	routerConfig.RedisDialTimeout = redisDialTimeout
-	routerConfig.StreamName = streamName
-	routerConfig.ConsumerGroup = consumerGroup
-	routerConfig.ConsumerName = consumerName
-	routerConfig.ClaimMinIdleTime = claimMinIdleTime
-	routerConfig.BlockTime = blockTime
-	routerConfig.MaxIdleTime = maxIdleTime
-	routerConfig.NackResendSleep = nackResendSleep
-	routerConfig.CommitOffsetAfter = commitOffsetAfter
 	routerConfig.AckWait = ackWait
+	routerConfig.TransportType = selectedTransportType
+
+	// Set transport-specific config
+	switch selectedTransportType {
+	case redis.TransportStream:
+		routerConfig.StreamName = streamName
+		routerConfig.ConsumerGroup = consumerGroup
+		routerConfig.ConsumerName = consumerName
+		routerConfig.ClaimMinIdleTime = claimMinIdleTime
+		routerConfig.BlockTime = blockTime
+		routerConfig.MaxIdleTime = maxIdleTime
+		routerConfig.NackResendSleep = nackResendSleep
+		routerConfig.CommitOffsetAfter = commitOffsetAfter
+		logger.Info().Str("stream", streamName).Str("group", consumerGroup).Msg("Using Redis Stream transport")
+	case redis.TransportPubSub:
+		routerConfig.TopicPattern = topicPattern
+		logger.Info().Str("topic_pattern", topicPattern).Msg("Using Redis Pub/Sub transport")
+	}
 
 	// Create the Redis router
 	router, err := redis.NewRouter(

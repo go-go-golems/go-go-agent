@@ -13,9 +13,20 @@ import (
 )
 
 // PlanAndExecuteAgentFactory creates PlanAndExecuteAgent instances.
-type PlanAndExecuteAgentFactory struct{}
+type PlanAndExecuteAgentFactory struct {
+	planningModel  llm.LLM
+	executionModel llm.LLM
+}
 
-var _ AgentFactory = &PlanAndExecuteAgentFactory{}
+func NewPlanAndExecuteAgentFactory(
+	planningModel llm.LLM,
+	executionModel llm.LLM,
+) *PlanAndExecuteAgentFactory {
+	return &PlanAndExecuteAgentFactory{
+		planningModel:  planningModel,
+		executionModel: executionModel,
+	}
+}
 
 const PlanAndExecuteAgentType = "plan-execute" // Define the type constant
 
@@ -26,14 +37,18 @@ type PlanAndExecuteAgentSettings struct {
 }
 
 // NewAgent creates a new PlanAndExecuteAgent.
-func (f *PlanAndExecuteAgentFactory) NewAgent(ctx context.Context, parsedLayers *layers.ParsedLayers, llmModel llm.LLM) (Agent, error) {
+func (f *PlanAndExecuteAgentFactory) NewAgent(
+	ctx context.Context,
+	parsedLayers *layers.ParsedLayers,
+	baseModel llm.LLM,
+) (Agent, error) {
 	var settings PlanAndExecuteAgentSettings
 	err := parsedLayers.InitializeStruct(PlanAndExecuteAgentType, &settings)
 	if err != nil {
 		return nil, err
 	}
 	// Use the provided llmModel for both planner and executor for now
-	return NewPlanAndExecuteAgent(llmModel, settings.MaxIterations), nil
+	return NewPlanAndExecuteAgent(f.planningModel, f.executionModel, settings.MaxIterations), nil
 }
 
 // CreateLayers defines the Glazed parameter layers for the PlanAndExecuteAgent.
@@ -65,11 +80,15 @@ type PlanAndExecuteAgent struct {
 }
 
 // NewPlanAndExecuteAgent creates a new PlanAndExecuteAgent
-func NewPlanAndExecuteAgent(model llm.LLM, maxIterations int) *PlanAndExecuteAgent {
+func NewPlanAndExecuteAgent(
+	planningModel llm.LLM,
+	executionModel llm.LLM,
+	maxIterations int,
+) *PlanAndExecuteAgent {
 	return &PlanAndExecuteAgent{
-		BaseAgent: NewBaseAgent(model, maxIterations),
-		planner:   model,
-		executor:  model,
+		BaseAgent: NewBaseAgent(planningModel, maxIterations),
+		planner:   planningModel,
+		executor:  executionModel,
 	}
 }
 
@@ -157,7 +176,8 @@ func (a *PlanAndExecuteAgent) parsePlan(plan string) []string {
 }
 
 // parseExecutorResponse parses the executor response into action and action input
-func (a *PlanAndExecuteAgent) parseExecutorResponse(response string) (action, actionInput string) {
+func (a *PlanAndExecuteAgent) parseExecutorResponse(response string) (string, string) {
+	var action, actionInput string
 	lines := strings.Split(response, "\n")
 
 	for i := 0; i < len(lines); i++ {

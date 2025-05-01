@@ -169,7 +169,9 @@ func (h *WSHub) Stop() {
 		default:
 			close(client.send)
 		}
-		client.conn.Close() // Force close connection
+		if err := client.conn.Close(); err != nil {
+			h.logger.Error().Err(err).Str("addr", client.addr).Msg("Error closing client connection")
+		}
 		delete(h.clients, client)
 	}
 
@@ -190,7 +192,9 @@ func (h *WSHub) isShuttingDown() bool {
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			c.hub.logger.Error().Err(err).Str("addr", c.addr).Msg("Error closing connection in readPump")
+		}
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
@@ -202,12 +206,7 @@ func (c *Client) readPump() {
 
 	// We only read messages to handle pings and detect disconnection
 	// We don't actually process messages from clients
-	for {
-		// Check if hub is shutting down
-		if c.hub.isShuttingDown() {
-			break
-		}
-
+	for !c.hub.isShuttingDown() {
 		_, _, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err,
@@ -228,7 +227,9 @@ func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			c.hub.logger.Error().Err(err).Str("addr", c.addr).Msg("Error closing connection in writePump")
+		}
 	}()
 
 	for {

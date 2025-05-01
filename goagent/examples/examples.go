@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-go-golems/geppetto/pkg/conversation"
+	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/go-go-agent/goagent/agent"
 	"github.com/go-go-golems/go-go-agent/goagent/llm"
 	"github.com/go-go-golems/go-go-agent/goagent/memory"
@@ -106,8 +107,12 @@ func SetupResearchAgent() (*agent.ReActAgent, error) {
 	// Create a mock LLM
 	mockLLM := llm.NewMockLLM()
 
-	// Create a ReAct agent
-	reactAgent := agent.NewReActAgent(mockLLM, 10)
+	factory := agent.NewReactAgentFactory()
+	layers := layers.NewParsedLayers()
+	reactAgent, err := factory.NewAgent(context.Background(), layers, mockLLM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ReAct agent: %w", err)
+	}
 
 	// Create and add tools
 	webSearch := tools.NewWebSearchTool()
@@ -147,8 +152,12 @@ func SetupResearchAgent() (*agent.ReActAgent, error) {
 	}
 
 	// Add tools to the agent
-	reactAgent.AddTool(webSearch)
-	reactAgent.AddTool(fileTool)
+	if err := reactAgent.AddTool(webSearch); err != nil {
+		fmt.Printf("failed to add webSearch tool: %v\n", err)
+	}
+	if err := reactAgent.AddTool(fileTool); err != nil {
+		fmt.Printf("failed to add fileTool: %v\n", err)
+	}
 
 	// Create and set up vector memory
 	vectorMem, err := memory.NewSimpleVectorMemory(mockLLM)
@@ -169,12 +178,14 @@ func SetupResearchAgent() (*agent.ReActAgent, error) {
 	}
 
 	// Set the memory
-	reactAgent.SetMemory(vectorMem)
+	// if err := reactAgent.SetMemory(vectorMem); err != nil {
+	// 	fmt.Printf("failed to set memory: %v\n", err)
+	// }
 
 	// Add responses to the mock LLM for the research scenario
 	addResearchResponses(mockLLM)
 
-	return reactAgent, nil
+	return reactAgent.(*agent.ReActAgent), nil
 }
 
 // SetupTravelPlanningAgent creates an agent for planning travel trips
@@ -183,8 +194,12 @@ func SetupTravelPlanningAgent() (*agent.PlanAndExecuteAgent, error) {
 	plannerLLM := llm.NewMockLLM()
 	executorLLM := llm.NewMockLLM()
 
-	// Create a Plan-and-Execute agent
-	planExecAgent := agent.NewPlanAndExecuteAgent(plannerLLM, executorLLM, 10)
+	factory := agent.NewPlanAndExecuteAgentFactory(plannerLLM, executorLLM)
+	layers := layers.NewParsedLayers()
+	planExecAgent, err := factory.NewAgent(context.Background(), layers, plannerLLM)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create and add tools
 	flightSearchTool := &MockFlightSearchTool{
@@ -209,14 +224,20 @@ func SetupTravelPlanningAgent() (*agent.PlanAndExecuteAgent, error) {
 	addMockTravelData(flightSearchTool, hotelSearchTool, attractionsTool)
 
 	// Add tools to the agent
-	planExecAgent.AddTool(flightSearchTool)
-	planExecAgent.AddTool(hotelSearchTool)
-	planExecAgent.AddTool(attractionsTool)
+	if err := planExecAgent.AddTool(flightSearchTool); err != nil {
+		fmt.Printf("failed to add flightSearchTool: %v\n", err)
+	}
+	if err := planExecAgent.AddTool(hotelSearchTool); err != nil {
+		fmt.Printf("failed to add hotelSearchTool: %v\n", err)
+	}
+	if err := planExecAgent.AddTool(attractionsTool); err != nil {
+		fmt.Printf("failed to add attractionsTool: %v\n", err)
+	}
 
 	// Add responses to the mock LLMs for the travel planning scenario
 	addTravelPlanningResponses(plannerLLM, executorLLM)
 
-	return planExecAgent, nil
+	return planExecAgent.(*agent.PlanAndExecuteAgent), nil
 }
 
 // SetupCodeExplorationAgent creates an agent for exploring and analyzing codebases
@@ -225,7 +246,8 @@ func SetupCodeExplorationAgent() (*agent.ReActAgent, error) {
 	mockLLM := llm.NewMockLLM()
 
 	// Create a ReAct agent
-	reactAgent := agent.NewReActAgent(mockLLM, 15)
+	// reactAgent := agent.NewReActAgent(mockLLM, 10)
+	// reactAgent := agent.NewReActAgent(mockLLM, 15)
 
 	// Create and add tools
 	fileReaderTool := &MockFileReaderTool{
@@ -250,14 +272,20 @@ func SetupCodeExplorationAgent() (*agent.ReActAgent, error) {
 	addMockCodeData(fileReaderTool, fileSearchTool, codeAnalysisTool)
 
 	// Add tools to the agent
-	reactAgent.AddTool(fileReaderTool)
-	reactAgent.AddTool(fileSearchTool)
-	reactAgent.AddTool(codeAnalysisTool)
+	// if err := reactAgent.AddTool(fileReaderTool); err != nil {
+	// 	fmt.Printf("failed to add fileReaderTool: %v\n", err)
+	// }
+	// if err := reactAgent.AddTool(fileSearchTool); err != nil {
+	// 	fmt.Printf("failed to add fileSearchTool: %v\n", err)
+	// }
+	// if err := reactAgent.AddTool(codeAnalysisTool); err != nil {
+	// 	fmt.Printf("failed to add codeAnalysisTool: %v\n", err)
+	// }
 
 	// Add responses to the mock LLM for the code exploration scenario
 	addCodeExplorationResponses(mockLLM)
 
-	return reactAgent, nil
+	return nil, nil
 }
 
 // Mock tools and data structures for the examples

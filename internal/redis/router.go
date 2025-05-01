@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-redisstream/pkg/redisstream"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/ThreeDotsLabs/watermill/message/router/plugin"
@@ -23,7 +22,10 @@ type RouterConfig struct {
 	RedisMaxRetries  int
 	RedisDialTimeout time.Duration
 
-	// Stream subscription options
+	// Transport type selection
+	TransportType TransportType
+
+	// Stream subscription options (used when TransportType is TransportStream)
 	StreamName        string
 	ConsumerGroup     string
 	ConsumerName      string
@@ -33,8 +35,14 @@ type RouterConfig struct {
 	NackResendSleep   time.Duration
 	CommitOffsetAfter time.Duration
 
+	// Pub/Sub subscription options (used when TransportType is TransportPubSub)
+	TopicPattern string // Pattern to subscribe to (e.g., "agent_events:*")
+
 	// Processing options
 	AckWait time.Duration
+
+	// Internal fields
+	redisClient redis.UniversalClient
 }
 
 // DefaultRouterConfig returns a RouterConfig with reasonable defaults
@@ -45,6 +53,7 @@ func DefaultRouterConfig() RouterConfig {
 		RedisDB:           0,
 		RedisMaxRetries:   3,
 		RedisDialTimeout:  time.Second * 5,
+		TransportType:     TransportStream, // Default to Stream for backward compatibility
 		StreamName:        "agent_events",
 		ConsumerGroup:     "go_server_group",
 		ConsumerName:      "go_server_consumer",
@@ -53,6 +62,7 @@ func DefaultRouterConfig() RouterConfig {
 		MaxIdleTime:       time.Minute * 5,
 		NackResendSleep:   time.Second * 2,
 		CommitOffsetAfter: time.Second * 10,
+		TopicPattern:      "agent_events:*",
 		AckWait:           time.Second * 30,
 	}
 }
@@ -121,9 +131,10 @@ type MessageHandler func(msg *message.Message) error
 func NewRouter(
 	ctx context.Context,
 	config RouterConfig,
-	logger zerolog.Logger,
+	logger zerolog.Logger, // Expect main application logger
 	handlers ...MessageHandler,
 ) (*message.Router, error) {
+	// Watermill's router still needs its adapter
 	watermillLogger := NewWatermillLogger(logger)
 
 	// Create Redis client
@@ -140,28 +151,50 @@ func NewRouter(
 		return nil, errors.Wrap(err, "failed to connect to Redis")
 	}
 
-	// Create Redis subscriber
-	subscriber, err := redisstream.NewSubscriber(
-		redisstream.SubscriberConfig{
-			Client:          redisClient,
-			Unmarshaller:    CustomEventUnmarshaller{},
-			ConsumerGroup:   config.ConsumerGroup,
-			Consumer:        config.ConsumerName,
-			BlockTime:       config.BlockTime,
-			MaxIdleTime:     config.MaxIdleTime,
-			NackResendSleep: config.NackResendSleep,
-		},
-		watermillLogger,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create Redis subscriber")
+	// Store Redis client in config for use by transport
+	config.redisClient = redisClient
+
+	// Create appropriate transport based on config
+	var subscriber message.Subscriber
+	var transport Transport
+	switch config.TransportType {
+	case TransportStream:
+		streamTransport := NewStreamTransport()
+		sub, err := streamTransport.CreateSubscriber(config, watermillLogger) // StreamTransport expects adapter
+		if err != nil {
+			if closeErr := redisClient.Close(); closeErr != nil {
+				logger.Error().Err(closeErr).Msg("Error closing Redis client after subscriber creation failure")
+			}
+			return nil, errors.Wrap(err, "failed to create Stream subscriber")
+		}
+		subscriber = sub
+		transport = streamTransport
+	case TransportPubSub:
+		pubsubTransport := NewPubSubTransport()
+		sub, err := pubsubTransport.CreateSubscriber(config, watermillLogger) // PubSubTransport now expects watermill.LoggerAdapter
+		if err != nil {
+			if closeErr := redisClient.Close(); closeErr != nil {
+				logger.Error().Err(closeErr).Msg("Error closing Redis client after subscriber creation failure")
+			}
+			return nil, errors.Wrap(err, "failed to create Pub/Sub subscriber")
+		}
+		subscriber = sub
+		transport = pubsubTransport
+	default:
+		if closeErr := redisClient.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("Error closing Redis client")
+		}
+		return nil, errors.Errorf("unsupported transport type: %s", config.TransportType)
 	}
 
 	// Create router
 	router, err := message.NewRouter(message.RouterConfig{
 		CloseTimeout: time.Second * 30,
-	}, watermillLogger)
+	}, watermillLogger) // Router uses the adapter
 	if err != nil {
+		if closeErr := redisClient.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("Error closing Redis client after router creation failure")
+		}
 		return nil, errors.Wrap(err, "failed to create message router")
 	}
 
@@ -171,7 +204,10 @@ func NewRouter(
 	router.AddMiddleware(middleware.CorrelationID)
 	router.AddMiddleware(middleware.Timeout(config.AckWait))
 
-	// Register all handlers to the same Redis Stream topic
+	// Get topic name from transport
+	topic := transport.GetTopicName(config)
+
+	// Register all handlers to the topic
 	for i, handler := range handlers {
 		handlerIndex := i // Capture for closure
 		handlerFunc := handler
@@ -180,7 +216,7 @@ func NewRouter(
 			// Handler name must be unique
 			watermill.NewUUID(),
 			// Topic to subscribe
-			config.StreamName,
+			topic,
 			// Subscriber
 			subscriber,
 			// No publishing needed, just consume
@@ -191,6 +227,7 @@ func NewRouter(
 				// This handler function adapts the MessageHandler signature to Watermill's expected format
 				err := handlerFunc(msg)
 				if err != nil {
+					// Log using the main application logger passed into NewRouter
 					logger.Error().
 						Err(err).
 						Int("handler_index", handlerIndex).
@@ -198,8 +235,7 @@ func NewRouter(
 						Msg("Handler returned error, will NACK message")
 					return nil, err // NACK
 				}
-				// No outgoing messages, just ACK
-				return nil, nil
+				return nil, nil // ACK
 			},
 		)
 	}

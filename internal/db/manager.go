@@ -39,7 +39,9 @@ func NewDatabaseManager(dbPath string) (*DatabaseManager, error) {
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("Error closing database connection after ping failure")
+		}
 		return nil, errors.Wrap(err, "failed to ping SQLite database")
 	}
 
@@ -54,7 +56,9 @@ func NewDatabaseManager(dbPath string) (*DatabaseManager, error) {
 
 	// Ensure schema exists
 	if err := manager.ensureSchema(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("Error closing database connection after schema initialization failure")
+		}
 		return nil, errors.Wrap(err, "failed to ensure database schema")
 	}
 
@@ -118,7 +122,9 @@ func (m *DatabaseManager) StoreEvent(event *Event) error {
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				m.logger.Error().Err(rbErr).Msg("Error rolling back transaction")
+			}
 		}
 	}()
 
@@ -410,7 +416,11 @@ func (m *DatabaseManager) GetRunGraph(ctx context.Context, runID string) (*Graph
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to query nodes")
 	}
-	defer nodeRows.Close()
+	defer func() {
+		if err := nodeRows.Close(); err != nil {
+			m.logger.Error().Err(err).Msg("Error closing node rows")
+		}
+	}()
 
 	for nodeRows.Next() {
 		var nodeJSON []byte
@@ -440,7 +450,11 @@ func (m *DatabaseManager) GetRunGraph(ctx context.Context, runID string) (*Graph
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to query edges")
 	}
-	defer edgeRows.Close()
+	defer func() {
+		if err := edgeRows.Close(); err != nil {
+			m.logger.Error().Err(err).Msg("Error closing edge rows")
+		}
+	}()
 
 	for edgeRows.Next() {
 		var edgeJSON []byte
@@ -501,7 +515,11 @@ func (m *DatabaseManager) GetRunEvents(ctx context.Context, runID string) (*Even
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to query events")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			m.logger.Error().Err(err).Msg("Error closing rows")
+		}
+	}()
 
 	data := &EventData{
 		Events: []json.RawMessage{},

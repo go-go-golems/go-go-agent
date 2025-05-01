@@ -6,6 +6,8 @@ import { ArrowRight, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import CodeHighlighter from './SyntaxHighlighter';
 import { statusColorMap, eventTypeBadgeVariant } from '../helpers/eventConstants.ts';
 import { formatTimestamp, RenderClickableNodeId } from '../helpers/formatters.tsx';
+import ErrorBoundary from './ErrorBoundary';
+import SimpleCodeFallback from './SimpleCodeFallback';
 
 interface EventDetailModalProps {
   show: boolean;
@@ -19,6 +21,28 @@ interface EventDetailModalProps {
   hasPreviousEvent?: boolean;
   hasNextEvent?: boolean;
 }
+
+/**
+ * Safely converts a value to a string for display
+ * @param value Value that needs to be displayed safely
+ * @param prettyJson Whether to format as pretty JSON
+ */
+const safeDisplayValue = (value: unknown, prettyJson = true): string => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  
+  if (typeof value === 'string') {
+    return value;
+  }
+  
+  try {
+    return prettyJson ? JSON.stringify(value, null, 2) : JSON.stringify(value);
+  } catch (e) {
+    console.error('Failed to stringify value:', e);
+    return '[Error: Unable to display value]';
+  }
+};
 
 const EventDetailModal: React.FC<EventDetailModalProps> = ({ 
   show, 
@@ -66,7 +90,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   if (!event) return null;
 
   const copyJsonToClipboard = () => {
-    navigator.clipboard.writeText(JSON.stringify(event, null, 2))
+    navigator.clipboard.writeText(safeDisplayValue(event, true))
       .then(() => {
         alert('JSON copied to clipboard');
       })
@@ -79,33 +103,49 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
     return eventTypeBadgeVariant[eventType] || eventTypeBadgeVariant.default;
   };
 
-  // Helper to format and truncate text previews
-  const formatPreview = (text: string, maxLength: number = 500): string => {
-    if (!text) return '';
-    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  // Update formatPreview to use unknown instead of any
+  const formatPreview = (text: unknown, maxLength: number = 500): string => {
+    const safeText = safeDisplayValue(text, false);
+    if (!safeText) return '';
+    return safeText.length > maxLength ? safeText.substring(0, maxLength) + '...' : safeText;
   };
 
   // Render the LLM prompt messages
   const renderPromptMessages = (messages: LlmMessage[]) => {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return <div className="alert alert-warning">No prompt messages available</div>;
+    }
+    
     return (
       <div className="prompt-messages">
-        {messages.map((message, index) => (
-          <div key={index} className={`message message-${message.role} mb-3 p-3 rounded`}>
-            <div className="message-header mb-2">
-              <Badge bg={message.role === 'system' ? 'secondary' : message.role === 'assistant' ? 'success' : 'primary'} className="text-uppercase">
-                {message.role}
-              </Badge>
+        {messages.map((message, index) => {
+          if (!message || typeof message !== 'object') {
+            return <div key={index} className="alert alert-warning">Invalid message format</div>;
+          }
+          
+          return (
+            <div key={index} className={`message message-${message.role} mb-3 p-3 rounded`}>
+              <div className="message-header mb-2">
+                <Badge bg={message.role === 'system' ? 'secondary' : message.role === 'assistant' ? 'success' : 'primary'} className="text-uppercase">
+                  {message.role}
+                </Badge>
+              </div>
+              <div className="message-content">
+                <ErrorBoundary 
+                  fallback={SimpleCodeFallback}
+                  contentForFallback={typeof message.content === 'string' ? message.content : safeDisplayValue(message.content, false)}
+                >
+                  <CodeHighlighter
+                    code={typeof message.content === 'string' ? message.content : safeDisplayValue(message.content)}
+                    language="markdown"
+                    maxHeight="300px"
+                    showLineNumbers={false}
+                  />
+                </ErrorBoundary>
+              </div>
             </div>
-            <div className="message-content">
-              <CodeHighlighter
-                code={message.content}
-                language="markdown"
-                maxHeight="300px"
-                showLineNumbers={false}
-              />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -253,11 +293,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               <strong>Prompt Preview</strong>
             </div>
             <div className="card-body">
-              <CodeHighlighter
-                code={formatPreview(event.payload.prompt_preview)}
-                language="markdown"
-                maxHeight="250px"
-              />
+              <ErrorBoundary 
+                fallback={SimpleCodeFallback}
+                contentForFallback={formatPreview(event.payload.prompt_preview)}
+              >
+                <CodeHighlighter
+                  code={formatPreview(event.payload.prompt_preview)}
+                  language="markdown"
+                  maxHeight="250px"
+                />
+              </ErrorBoundary>
               {event.payload.prompt && (
                 <div className="text-end mt-2">
                   <Button size="sm" variant="outline-primary" onClick={() => setActiveTab('prompt')}>
@@ -312,11 +357,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               <strong>Response Preview</strong>
             </div>
             <div className="card-body">
-              <CodeHighlighter
-                code={formatPreview(event.payload.response)}
-                language="markdown"
-                maxHeight="250px"
-              />
+              <ErrorBoundary 
+                fallback={SimpleCodeFallback}
+                contentForFallback={formatPreview(event.payload.response || '')}
+              >
+                <CodeHighlighter
+                  code={formatPreview(event.payload.response || '')}
+                  language="markdown"
+                  maxHeight="250px"
+                />
+              </ErrorBoundary>
               <div className="text-end mt-2">
                 <Button size="sm" variant="outline-primary" onClick={() => setActiveTab('response')}>
                   View Full Response
@@ -401,11 +451,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               <strong>Result</strong>
             </div>
             <div className="card-body">
-              <CodeHighlighter
-                code={event.payload.result_summary}
-                language="json"
-                maxHeight="200px"
-              />
+              <ErrorBoundary 
+                fallback={SimpleCodeFallback}
+                contentForFallback={event.payload.result_summary || ''}
+              >
+                <CodeHighlighter
+                  code={event.payload.result_summary || ''}
+                  language="json"
+                  maxHeight="200px"
+                />
+              </ErrorBoundary>
             </div>
           </div>
         </>
@@ -481,12 +536,17 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               <strong>Plan Structure</strong>
             </div>
             <div className="card-body">
-              <CodeHighlighter
-                code={JSON.stringify(event.payload.raw_plan, null, 2)}
-                language="json"
-                maxHeight="300px"
-                showLineNumbers={true}
-              />
+              <ErrorBoundary 
+                fallback={SimpleCodeFallback}
+                contentForFallback={safeDisplayValue(event.payload.raw_plan)}
+              >
+                <CodeHighlighter
+                  code={safeDisplayValue(event.payload.raw_plan)}
+                  language="json"
+                  maxHeight="300px"
+                  showLineNumbers={true}
+                />
+              </ErrorBoundary>
             </div>
           </div>
         </>
@@ -641,11 +701,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               <strong>Result Content</strong>
             </div>
             <div className="card-body">
-              <CodeHighlighter
-                code={event.payload.result_summary}
-                language="markdown"
-                maxHeight="300px"
-              />
+              <ErrorBoundary 
+                fallback={SimpleCodeFallback}
+                contentForFallback={event.payload.result_summary || ''}
+              >
+                <CodeHighlighter
+                  code={event.payload.result_summary || ''}
+                  language="markdown"
+                  maxHeight="300px"
+                />
+              </ErrorBoundary>
             </div>
           </div>
         </>
@@ -659,11 +724,17 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
           <strong>Event Details</strong>
         </div>
         <div className="card-body">
-          <CodeHighlighter 
-            code={JSON.stringify(event.payload, null, 2)}
-            language="json"
-            maxHeight="300px"
-          />
+          <ErrorBoundary 
+            fallback={SimpleCodeFallback}
+            contentForFallback={safeDisplayValue(event)}
+          >
+            <CodeHighlighter
+              code={safeDisplayValue(event)}
+              language="json"
+              maxHeight="300px"
+              showLineNumbers={true}
+            />
+          </ErrorBoundary>
         </div>
       </div>
     );
@@ -682,7 +753,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <strong>Full Prompt</strong>
               </div>
               <div className="card-body">
-                {renderPromptMessages(event.payload.prompt)}
+                <ErrorBoundary fallback={SimpleCodeFallback}>
+                  {renderPromptMessages(event.payload.prompt)}
+                </ErrorBoundary>
               </div>
             </div>
           )
@@ -701,13 +774,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <strong>Full Response</strong>
               </div>
               <div className="card-body">
-                <div className="message message-assistant p-3 rounded">
+                <ErrorBoundary 
+                  fallback={SimpleCodeFallback}
+                  contentForFallback={event.payload.response || ''}
+                >
                   <CodeHighlighter
-                    code={event.payload.response}
+                    code={event.payload.response || ''}
                     language="markdown"
                     maxHeight="500px"
                   />
-                </div>
+                </ErrorBoundary>
               </div>
             </div>
           )
@@ -727,16 +803,27 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
         <div className="p-3">
           <h5>Full Prompt</h5>
           {Array.isArray(event.payload.prompt) ? (
-            event.payload.prompt.map((message: LlmMessage, index: number) => (
-              <div key={index} className="mb-3">
-                <div className="fw-bold">{message.role}</div>
-                <CodeHighlighter
-                  code={message.content}
-                  language="markdown"
-                  maxHeight="400px"
-                />
-              </div>
-            ))
+            event.payload.prompt.map((message: LlmMessage, index: number) => {
+              if (!message || typeof message !== 'object' || typeof message.content === 'undefined') {
+                return <div key={index} className="alert alert-warning">Invalid message format</div>;
+              }
+              
+              return (
+                <div key={index} className="mb-3">
+                  <div className="fw-bold">{message.role}</div>
+                  <ErrorBoundary 
+                    fallback={SimpleCodeFallback}
+                    contentForFallback={typeof message.content === 'string' ? message.content : safeDisplayValue(message.content, false)}
+                  >
+                    <CodeHighlighter
+                      code={typeof message.content === 'string' ? message.content : safeDisplayValue(message.content)}
+                      language="markdown"
+                      maxHeight="400px"
+                    />
+                  </ErrorBoundary>
+                </div>
+              );
+            })
           ) : (
             <div className="alert alert-warning">
               Prompt is not in expected format
@@ -750,11 +837,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       return (
         <div className="p-3">
           <h5>Full Response</h5>
-          <CodeHighlighter
-            code={event.payload.response}
-            language="markdown"
-            maxHeight="400px"
-          />
+          <ErrorBoundary 
+            fallback={SimpleCodeFallback}
+            contentForFallback={event.payload.response || ''}
+          >
+            <CodeHighlighter
+              code={event.payload.response || ''}
+              language="markdown"
+              maxHeight="400px"
+            />
+          </ErrorBoundary>
         </div>
       );
     }
@@ -763,12 +855,17 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
       return (
         <div className="p-3">
           <h5>Raw Plan</h5>
-          <CodeHighlighter
-            code={JSON.stringify(event.payload.raw_plan, null, 2)}
-            language="json"
-            maxHeight="400px"
-            showLineNumbers={true}
-          />
+          <ErrorBoundary 
+            fallback={SimpleCodeFallback}
+            contentForFallback={safeDisplayValue(event.payload.raw_plan)}
+          >
+            <CodeHighlighter
+              code={safeDisplayValue(event.payload.raw_plan)}
+              language="json"
+              maxHeight="400px"
+              showLineNumbers={true}
+            />
+          </ErrorBoundary>
         </div>
       );
     }
@@ -778,11 +875,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
         return (
           <div className="p-3">
             <h5>Tool Result</h5>
-            <CodeHighlighter
-              code={event.payload.result_summary}
-              language="json"
-              maxHeight="400px"
-            />
+            <ErrorBoundary 
+              fallback={SimpleCodeFallback}
+              contentForFallback={event.payload.result_summary || ''}
+            >
+              <CodeHighlighter
+                code={event.payload.result_summary || ''}
+                language="json"
+                maxHeight="400px"
+              />
+            </ErrorBoundary>
           </div>
         );
       }
@@ -791,11 +893,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
         return (
           <div className="p-3">
             <h5>Node Result</h5>
-            <CodeHighlighter
-              code={event.payload.result_summary}
-              language="markdown"
-              maxHeight="400px"
-            />
+            <ErrorBoundary 
+              fallback={SimpleCodeFallback}
+              contentForFallback={event.payload.result_summary || ''}
+            >
+              <CodeHighlighter
+                code={event.payload.result_summary || ''}
+                language="markdown"
+                maxHeight="400px"
+              />
+            </ErrorBoundary>
           </div>
         );
       }
@@ -862,7 +969,9 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
           </Nav>
           <Tab.Content className="p-3">
             <Tab.Pane eventKey="summary">
-              {renderSummaryContent()}
+              <ErrorBoundary>
+                {renderSummaryContent()}
+              </ErrorBoundary>
             </Tab.Pane>
             {specialTabs.map(tab => (
               <Tab.Pane key={tab.key} eventKey={tab.key}>
@@ -875,12 +984,14 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                   Copy JSON
                 </Button>
               </div>
-              <CodeHighlighter
-                code={JSON.stringify(event, null, 2)}
-                language="json"
-                maxHeight="400px"
-                showLineNumbers={true}
-              />
+              <ErrorBoundary>
+                <CodeHighlighter
+                  code={safeDisplayValue(event)}
+                  language="json"
+                  maxHeight="400px"
+                  showLineNumbers={true}
+                />
+              </ErrorBoundary>
             </Tab.Pane>
             <Tab.Pane eventKey="metadata">
               <div className="card">

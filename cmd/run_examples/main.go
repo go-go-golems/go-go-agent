@@ -14,7 +14,10 @@ func main() {
 	// Create traces directory if it doesn't exist
 	tracesDir := filepath.Join("..", "traces")
 	if _, err := os.Stat(tracesDir); os.IsNotExist(err) {
-		os.MkdirAll(tracesDir, 0755)
+		if err := os.MkdirAll(tracesDir, 0755); err != nil {
+			fmt.Printf("Error creating traces directory: %v\n", err)
+			return
+		}
 	}
 
 	// Run research example

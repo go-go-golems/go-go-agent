@@ -4,12 +4,11 @@
 }
 
 .event-row:hover {
-  background-color: rgba(0, 123, 255, 0.08);
+  background-color: rgba(0, 123, 255, 0.05);
 }
 
 .event-row-highlighted {
-  background-color: #f0f0f0 !important;
-  border-left: 4px solid #007bff;
+  background-color: rgba(0, 123, 255, 0.1) !important;
 }
 
 /* Modal styles */
@@ -84,19 +83,55 @@ pre {
 /* Button to copy code */
 .copy-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 5px;
+  right: 5px;
+  z-index: 10;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  cursor: pointer;
   opacity: 0.7;
   transition: opacity 0.2s;
-  border: none;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-  z-index: 10;
 }
 
 .copy-button:hover {
   opacity: 1;
+}
+
+/* CodeHighlighter enhanced styles */
+.code-highlighter-wrapper {
+  position: relative;
+  margin-bottom: 0.5rem;
+}
+
+.code-highlighter-wrapper pre {
+  border-radius: 4px;
+  white-space: pre-wrap !important; /* Force wrapping */
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* Force wrapping of code blocks, including all children */
+.code-highlighter-wrapper * {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}
+
+/* Style for code token spans to ensure they wrap properly */
+.code-highlighter-wrapper code span {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}
+
+/* Ensure JSON formatting doesn't break layout */
+.code-highlighter-wrapper[data-language="json"] span {
+  white-space: pre-wrap !important;
+}
+
+/* SimpleCodeFallback styles */
+.simple-code-fallback pre {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
 } 

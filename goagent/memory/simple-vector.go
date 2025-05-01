@@ -49,8 +49,9 @@ func (m *SimpleVectorMemory) Add(ctx context.Context, memory types.MemoryEntry) 
 		if err != nil {
 			return fmt.Errorf("failed to generate embedding: %w", err)
 		}
-		memory.Embedding = embedding
 	}
+
+	_ = embedding
 
 	m.entries[memory.ID] = memory
 	return nil

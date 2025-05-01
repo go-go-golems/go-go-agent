@@ -162,7 +162,9 @@ func NewRouter(
 		streamTransport := NewStreamTransport()
 		sub, err := streamTransport.CreateSubscriber(config, watermillLogger) // StreamTransport expects adapter
 		if err != nil {
-			redisClient.Close()
+			if closeErr := redisClient.Close(); closeErr != nil {
+				logger.Error().Err(closeErr).Msg("Error closing Redis client after subscriber creation failure")
+			}
 			return nil, errors.Wrap(err, "failed to create Stream subscriber")
 		}
 		subscriber = sub
@@ -171,13 +173,17 @@ func NewRouter(
 		pubsubTransport := NewPubSubTransport()
 		sub, err := pubsubTransport.CreateSubscriber(config, watermillLogger) // PubSubTransport now expects watermill.LoggerAdapter
 		if err != nil {
-			redisClient.Close()
+			if closeErr := redisClient.Close(); closeErr != nil {
+				logger.Error().Err(closeErr).Msg("Error closing Redis client after subscriber creation failure")
+			}
 			return nil, errors.Wrap(err, "failed to create Pub/Sub subscriber")
 		}
 		subscriber = sub
 		transport = pubsubTransport
 	default:
-		redisClient.Close() // Close client before returning error
+		if closeErr := redisClient.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("Error closing Redis client")
+		}
 		return nil, errors.Errorf("unsupported transport type: %s", config.TransportType)
 	}
 
@@ -186,7 +192,9 @@ func NewRouter(
 		CloseTimeout: time.Second * 30,
 	}, watermillLogger) // Router uses the adapter
 	if err != nil {
-		redisClient.Close()
+		if closeErr := redisClient.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("Error closing Redis client after router creation failure")
+		}
 		return nil, errors.Wrap(err, "failed to create message router")
 	}
 

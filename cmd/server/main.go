@@ -162,7 +162,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize database manager")
 	}
-	defer dbManager.Close()
+	defer func() {
+		if err := dbManager.Close(); err != nil {
+			logger.Error().Err(err).Msg("Error closing database manager")
+		}
+	}()
 
 	// Initialize state managers
 	eventManager := state.NewEventManager(logger, maxEventHistorySize)

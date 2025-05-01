@@ -87,10 +87,8 @@ func (m *EventManager) LoadStateFromDB(events []model.Event) {
 	// Reset current state
 	m.events = make([]model.Event, 0, len(events))
 
-	// Add each event from the database
-	for _, event := range events {
-		m.events = append(m.events, event)
-	}
+	// Add all events from the database at once
+	m.events = append(m.events, events...)
 
 	m.logger.Info().
 		Int("event_count", len(m.events)).

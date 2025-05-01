@@ -3,11 +3,12 @@ package memory
 import (
 	"context"
 	"fmt"
-	"github.com/goagent/framework/goagent/types"
-	"github.com/google/uuid"
 	"math"
 	"sort"
 	"sync"
+
+	"github.com/go-go-golems/go-go-agent/goagent/types"
+	"github.com/google/uuid"
 )
 
 // SimpleVectorMemory implements a simple vector memory system

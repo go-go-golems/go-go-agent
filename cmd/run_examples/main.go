@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/goagent/framework/goagent/examples"
+	"github.com/go-go-golems/go-go-agent/goagent/examples"
 )
 
 func main() {
@@ -107,14 +107,14 @@ func saveResult(filename string, content string) {
 
 func saveTrace(filename string, events []interface{}) {
 	path := filepath.Join("..", "traces", filename)
-	
+
 	// Convert events to JSON
 	data, err := json.MarshalIndent(events, "", "  ")
 	if err != nil {
 		fmt.Printf("Error marshaling trace data: %v\n", err)
 		return
 	}
-	
+
 	err = os.WriteFile(path, data, 0644)
 	if err != nil {
 		fmt.Printf("Error saving trace to %s: %v\n", path, err)

@@ -20,7 +20,7 @@ The existing backend server provides a REST API and WebSocket interface to manag
 A standard Go project layout will be used:
 
 ```
-writehere-go/
+github.com/go-go-golems/go-go-agent/
 ├── cmd/
 │   └── backend/
 │       └── main.go       # Cobra entry point & server startup

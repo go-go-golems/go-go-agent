@@ -11,8 +11,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"writehere-go/internal/redis" // Use full module path for internal package
-	"writehere-go/pkg/model"     // Use full module path for pkg package
+	"github.com/go-go-golems/go-go-agent/internal/redis" // Use full module path for internal package
+	"github.com/go-go-golems/go-go-agent/pkg/model"      // Use full module path for pkg package
 )
 
 func main() {

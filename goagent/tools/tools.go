@@ -9,7 +9,7 @@ import (
 	go_openai "github.com/sashabaranov/go-openai"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 
-	"github.com/goagent/framework/goagent/types"
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 )
 
 // Tool interface defines the functionality of a tool

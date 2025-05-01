@@ -15,9 +15,9 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
 	"github.com/go-go-golems/glazed/pkg/help"
+	"github.com/go-go-golems/go-go-agent/goagent/agent" // Import our agent implementation
+	"github.com/go-go-golems/go-go-agent/goagent/llm"
 	pinocchio_cmds "github.com/go-go-golems/pinocchio/pkg/cmds"
-	"github.com/goagent/framework/goagent/agent" // Import our agent implementation
-	"github.com/goagent/framework/goagent/llm"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"

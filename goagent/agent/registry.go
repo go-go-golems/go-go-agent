@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/goagent/framework/goagent/llm"
+	"github.com/go-go-golems/go-go-agent/goagent/llm"
 )
 
 type AgentFactory interface {

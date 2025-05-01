@@ -391,12 +391,12 @@ Based on the implemented code and proposed architecture:
 
 ## 15. Package Layout
 
-The go module is within `writehere-go/`.
+The go module is within `github.com/go-go-golems/go-go-agent/`.
 
 ✅ Implemented mostly as proposed. `internal/api` handlers are currently within `internal/server/http.go`. `internal/ws` hub is within `internal/server/ws.go`. `pkg/config` and `pkg/log` were integrated into `cmd/server/main.go`.
 
 ```
-writehere-go/
+github.com/go-go-golems/go-go-agent/
   go.mod
   go.sum
   cmd/

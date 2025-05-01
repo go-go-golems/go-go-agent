@@ -2,7 +2,8 @@ package tools
 
 import (
 	"context"
-	"github.com/goagent/framework/goagent/types"
+
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 )
 
 // MockTool implements the Tool interface for testing

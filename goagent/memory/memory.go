@@ -3,7 +3,8 @@ package memory
 
 import (
 	"context"
-	"github.com/goagent/framework/goagent/types"
+
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 )
 
 // Memory interface defines the functionality of a memory system

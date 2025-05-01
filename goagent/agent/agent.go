@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/go-go-golems/glazed/pkg/middlewares"
-	"github.com/goagent/framework/goagent/llm"
-	"github.com/goagent/framework/goagent/memory"
-	"github.com/goagent/framework/goagent/tools"
-	"github.com/goagent/framework/goagent/tracing"
+	"github.com/go-go-golems/go-go-agent/goagent/llm"
+	"github.com/go-go-golems/go-go-agent/goagent/memory"
+	"github.com/go-go-golems/go-go-agent/goagent/tools"
+	"github.com/go-go-golems/go-go-agent/goagent/tracing"
 )
 
 // Agent interface defines the core functionality of an agent

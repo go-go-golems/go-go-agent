@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/goagent/framework/goagent/types"
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 	"github.com/google/uuid"
 )
 
@@ -13,10 +13,10 @@ import (
 type Tracer interface {
 	// StartSpan starts a new span
 	StartSpan(ctx context.Context, name string) (context.Context, types.Span)
-	
+
 	// LogEvent logs an event
 	LogEvent(ctx context.Context, event types.Event)
-	
+
 	// GetEvents returns all events
 	GetEvents() []interface{}
 }
@@ -43,7 +43,7 @@ func (t *SimpleTracer) StartSpan(ctx context.Context, name string) (context.Cont
 		StartTime: time.Now().UnixNano(),
 		tracer:    t,
 	}
-	
+
 	t.spans = append(t.spans, span)
 	t.events = append(t.events, map[string]interface{}{
 		"type":      "span_start",
@@ -51,7 +51,7 @@ func (t *SimpleTracer) StartSpan(ctx context.Context, name string) (context.Cont
 		"name":      name,
 		"timestamp": span.StartTime,
 	})
-	
+
 	return ctx, span
 }
 
@@ -60,7 +60,7 @@ func (t *SimpleTracer) LogEvent(ctx context.Context, event types.Event) {
 	if event.Timestamp == 0 {
 		event.Timestamp = time.Now().UnixNano()
 	}
-	
+
 	t.events = append(t.events, event)
 }
 
@@ -81,7 +81,7 @@ type SimpleSpan struct {
 // End ends the span
 func (s *SimpleSpan) End() {
 	s.EndTime = time.Now().UnixNano()
-	
+
 	s.tracer.events = append(s.tracer.events, map[string]interface{}{
 		"type":      "span_end",
 		"span_id":   s.ID,

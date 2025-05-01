@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"writehere-go/pkg/model"
+	"github.com/go-go-golems/go-go-agent/pkg/model"
 )
 
 // EventManager manages the in-memory state of events for the current session

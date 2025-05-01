@@ -8,8 +8,8 @@ import (
 	"github.com/go-go-golems/geppetto/pkg/conversation"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
-	"github.com/goagent/framework/goagent/llm"
-	"github.com/goagent/framework/goagent/types"
+	"github.com/go-go-golems/go-go-agent/goagent/llm"
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 )
 
 type ReactAgentFactory struct{}

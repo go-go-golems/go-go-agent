@@ -11,7 +11,7 @@ This document serves as a handover guide for developers joining the project, exp
 We have implemented the foundational infrastructure (Phase 1) and begun work on the Scheduler Framework (Phase 2) and Action System (Phase 3):
 
 - **Project Setup & Core Packages (Phase 1):**
-  - Go module (`github.com/go-go-golems/writehere-go`), directory structure.
+  - Go module (`github.com/go-go-golems/github.com/go-go-golems/go-go-agent`), directory structure.
   - `pkg/events`: Event definitions (`TaskSubmitted`, `TaskReady`, `TaskAssigned`, `TaskStarted`, `TaskCompleted`, `TaskFailed`, `SubtasksPlanned`), `EventBus` (Watermill/GoChannel).
   - `pkg/state`: `Task` model (with `RUNNING` status), `Store` interface, `InMemoryStore`, `StateService` (handles `TaskSubmitted`, `TaskCompleted`, `TaskFailed`, `TaskStarted`, `SubtasksPlanned`).
   - `cmd/engine-api`: API gateway (`POST /tasks`, `GET /tasks/{id}`, `GET /tasks/root/{root_id}`).

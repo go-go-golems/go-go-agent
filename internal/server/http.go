@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	"writehere-go/internal/state"
+	"github.com/go-go-golems/go-go-agent/internal/state"
 )
 
 // HTTPServerConfig contains all configuration for the HTTP server

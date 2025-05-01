@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/goagent/framework/goagent/types"
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 )
 

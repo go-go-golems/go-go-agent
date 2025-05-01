@@ -9,8 +9,8 @@ import (
 	"github.com/go-go-golems/clay/pkg/repositories"
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
 	"github.com/go-go-golems/glazed/pkg/help"
+	goagentcmds "github.com/go-go-golems/go-go-agent/goagent/cmds"
 	pinocchio_cmds "github.com/go-go-golems/pinocchio/pkg/cmds"
-	goagentcmds "github.com/goagent/framework/goagent/cmds"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )

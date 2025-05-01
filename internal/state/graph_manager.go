@@ -6,7 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"writehere-go/pkg/model"
+	"github.com/go-go-golems/go-go-agent/pkg/model"
 )
 
 // GraphNode represents a node in the graph

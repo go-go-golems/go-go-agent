@@ -15,11 +15,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"writehere-go/internal/db"
-	"writehere-go/internal/redis"
-	"writehere-go/internal/server"
-	"writehere-go/internal/state"
-	"writehere-go/pkg/model"
+	"github.com/go-go-golems/go-go-agent/internal/db"
+	"github.com/go-go-golems/go-go-agent/internal/redis"
+	"github.com/go-go-golems/go-go-agent/internal/server"
+	"github.com/go-go-golems/go-go-agent/internal/state"
+	"github.com/go-go-golems/go-go-agent/pkg/model"
 )
 
 var (

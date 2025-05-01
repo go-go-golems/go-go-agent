@@ -15,7 +15,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
 	"github.com/go-go-golems/glazed/pkg/help"
-	"github.com/goagent/framework/goagent/llm"
+	"github.com/go-go-golems/go-go-agent/goagent/llm"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"

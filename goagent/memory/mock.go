@@ -2,9 +2,10 @@ package memory
 
 import (
 	"context"
-	"github.com/goagent/framework/goagent/types"
-	"github.com/google/uuid"
 	"sync"
+
+	"github.com/go-go-golems/go-go-agent/goagent/types"
+	"github.com/google/uuid"
 )
 
 // MockMemory implements the Memory interface for testing

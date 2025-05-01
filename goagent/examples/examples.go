@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/go-go-golems/geppetto/pkg/conversation"
-	"github.com/goagent/framework/goagent/agent"
-	"github.com/goagent/framework/goagent/llm"
-	"github.com/goagent/framework/goagent/memory"
-	"github.com/goagent/framework/goagent/tools"
-	"github.com/goagent/framework/goagent/types"
+	"github.com/go-go-golems/go-go-agent/goagent/agent"
+	"github.com/go-go-golems/go-go-agent/goagent/llm"
+	"github.com/go-go-golems/go-go-agent/goagent/memory"
+	"github.com/go-go-golems/go-go-agent/goagent/tools"
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v2"
 )

@@ -7,8 +7,8 @@ import { useAppDispatch, useAppSelector } from '../store';
 import { pushModal } from '../features/ui/modalStackSlice';
 import { formatTimestamp, RenderClickableNodeId } from '../helpers/formatters.tsx'; // Use shared formatter
 import EventTypeBadge from './EventTypeBadge.tsx'; // Use shared badge
-import EventPayloadDetails from './EventPayloadDetails.tsx'; // Use shared details renderer
 import ErrorBoundary from './ErrorBoundary'; // Import the error boundary component
+import { getTableWidget, registerAllWidgets } from './eventWidgets/widgetRegistry';
 
 // Helper function to extract common IDs or return N/A
 const getEventStep = (event: AgentEvent): number | string => {
@@ -102,6 +102,11 @@ const EventTable: React.FC = () => {
     const [activeEventTypes, setActiveEventTypes] = useState<KnownEventType[]>(ALL_EVENT_TYPES);
     const tableEndRef = useRef<HTMLDivElement>(null);
     const highlightedRowRef = useRef<HTMLTableRowElement>(null);
+    
+    // Register all widgets when the component mounts
+    useEffect(() => {
+        registerAllWidgets();
+    }, []);
     
     // Handle opening the modal with a specific event
     const handleEventClick = (event: AgentEvent) => {
@@ -362,6 +367,7 @@ const EventTable: React.FC = () => {
                         {displayEvents.map((event) => {
                             const nodeIdInfo = getEventNodeIdInfo(event);
                             const isHighlighted = currentEventId === event.event_id;
+                            const TableWidget = getTableWidget(event.event_type);
                             
                             return (
                                 <tr 
@@ -387,7 +393,13 @@ const EventTable: React.FC = () => {
                                     </td>
                                     <td className="px-3 py-2 text-muted small text-start">
                                         <ErrorBoundary>
-                                            <EventPayloadDetails event={event} onNodeClick={handleNodeClick} showCallIds={true} />
+                                            <TableWidget 
+                                                event={event} 
+                                                onNodeClick={handleNodeClick} 
+                                                showCallIds={true} 
+                                                compact={true} 
+                                                className="text-truncate"
+                                            />
                                         </ErrorBoundary>
                                     </td>
                                 </tr>

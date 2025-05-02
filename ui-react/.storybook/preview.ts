@@ -1,22 +1,18 @@
-import type { Preview } from '@storybook/react'
-import 'bootstrap/dist/css/bootstrap.min.css'
-import '../src/components/styles.css'
-import { initialize, mswLoader } from 'msw-storybook-addon'
-
-// Initialize MSW
-initialize()
+import type { Preview } from "@storybook/react";
+import 'bootstrap/dist/css/bootstrap.min.css';
+import '../src/components/styles.css';
 
 const preview: Preview = {
-  loaders: [mswLoader],
-  parameters: {
-    controls: {
-      matchers: {
-       color: /(background|color)$/i,
-       date: /Date$/i,
-      },
+    parameters: {
+        actions: { argTypesRegex: "^on[A-Z].*" },
+        controls: {
+            matchers: {
+                color: /(background|color)$/i,
+                date: /Date$/i,
+            },
+        },
+        layout: 'fullscreen',
     },
-    layout: 'centered',
-  },
 };
 
-export default preview;
+export default preview; 

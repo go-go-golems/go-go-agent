@@ -1,14 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from '@storybook/test';
 import DefaultTableWidget from './DefaultTableWidget';
-import { mockAgentEvent, mockStepStartedEvent, mockLlmCompletedEvent } from './mockData';
+import { mockAgentEvent } from './mockData';
 
 const meta = {
   title: 'EventWidgets/DefaultTableWidget',
   component: DefaultTableWidget,
-  parameters: {
-    layout: 'centered',
-  },
+  parameters: { layout: 'centered' },
   tags: ['autodocs'],
   argTypes: {
     event: { control: 'object' },
@@ -18,64 +16,49 @@ const meta = {
   },
   args: {
     onNodeClick: fn(),
-  },
+    showCallIds: true,
+    compact: true,
+  }
 } satisfies Meta<typeof DefaultTableWidget>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Basic example with a generic event
-export const GenericEvent: Story = {
+// Basic example with a simple payload
+export const Basic: Story = {
   args: {
-    event: mockAgentEvent('custom_event', {
-      message: 'This is a custom event',
-      status: 'success',
-      details: { key: 'value' },
-    }),
-    showCallIds: true,
-    compact: false,
+    event: mockAgentEvent('unknown_event_type', { key: 'value', number: 42 }),
   },
 };
 
-// Example with a step started event
-export const StepStartedEvent: Story = {
+// More complex payload
+export const Complex: Story = {
   args: {
-    event: mockStepStartedEvent('node-123'),
-    showCallIds: true,
-    compact: false,
-  },
-};
-
-// Example with an LLM call completed event
-export const LlmCallCompletedEvent: Story = {
-  args: {
-    event: mockLlmCompletedEvent('node-456'),
-    showCallIds: true,
-    compact: false,
-  },
-};
-
-// Example with compact mode enabled
-export const CompactView: Story = {
-  args: {
-    event: mockStepStartedEvent('node-789'),
-    showCallIds: false,
-    compact: true,
-  },
-};
-
-// Example with a long payload to test overflow handling
-export const LongPayload: Story = {
-  args: {
-    event: mockAgentEvent('event_with_long_data', {
-      description: 'This is a very long piece of text designed to test how the default widget handles potential overflow or truncation in the table view. It should not break the layout.',
-      additionalInfo: {
-        field1: 'More data here',
-        field2: 'Even more data',
-        field3: Array(50).fill('test').join(', '),
+    event: mockAgentEvent('complex_event', {
+      nested: { 
+        data: { 
+          array: [1, 2, 3], 
+          object: { a: 1, b: 2 } 
+        }
       },
+      status: 'complete',
     }),
-    showCallIds: true,
+  },
+};
+
+// Long text to test truncation
+export const LongText: Story = {
+  args: {
+    event: mockAgentEvent('text_event', {
+      message: 'This is a very long text that should be truncated in the table view to ensure it does not take up too much space. We want to make sure the ellipsis is displayed properly and the full text is available on hover.'
+    }),
+  },
+};
+
+// With compact mode disabled
+export const NotCompact: Story = {
+  args: {
+    event: mockAgentEvent('unknown_event_type', { key: 'value', number: 42 }),
     compact: false,
   },
 }; 

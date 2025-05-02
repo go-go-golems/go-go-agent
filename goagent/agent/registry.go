@@ -97,4 +97,6 @@ func init() {
 	RegisterAgentType(PlanAndExecuteAgentType, &PlanAndExecuteAgentFactory{})
 
 	RegisterAgentType(FileCollectionAgentType, &FileCollectionAgentFactory{})
+
+	RegisterAgentType(StructuredDataAgentType, &StructuredDataAgentFactory{})
 }

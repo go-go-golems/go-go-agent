@@ -1,0 +1,183 @@
+name: youtube-transcript-processor
+short: "Analyzes video transcripts to extract key information and generate insights"
+long: |
+  An agent that analyzes programming/technical video transcripts to extract key information, classify content, identify potential topics for articles and YouTube shorts, and provide detailed summaries.
+
+type: agent
+command-type: glazed # Use glazed for structured output
+agent-type: file-collection # Suitable for generating structured output files
+
+system-prompt: |
+  You are an AI assistant tasked with analyzing programming/technical video transcripts and extracting valuable insights.
+
+prompt: |
+  You are an AI assistant tasked with analyzing a transcript from a programming/technical stream that includes discussions on AI coding-related topics. Your goal is to extract key information, classify the stream, identify potential topics for articles and YouTube shorts, and provide a detailed summary.
+
+  Here's the transcript of the stream:
+
+  <transcript>
+  {{TRANSCRIPT}}
+  </transcript>
+
+  The title of the stream is:
+
+  Please follow these steps to analyze the transcript:
+
+  1. Read through the transcript carefully.
+
+  2. Identify different sections of the stream based on topics discussed. List these sections with their approximate timestamps.
+
+  3. For each step of the analysis, use <thinking_block> tags to show your thought process:
+
+     a. Extract key information:
+        - List each main speaker and guest as you encounter them in the transcript, quoting relevant parts
+        - Note each primary programming language or technology discussed, with supporting quotes
+        - List each specific project or tool mentioned, providing context from the transcript
+        - Record any notable quotes or insights shared during the stream (provide direct citations)
+
+     b. Classify the stream:
+        - Consider at least three potential primary focuses (e.g., AI development, web programming, data science)
+        - List pros and cons for each potential focus
+        - Consider at least three potential formats (e.g., tutorial, Q&A, project walkthrough, discussion)
+        - List pros and cons for each potential format
+        - Determine the best fit for primary focus and format based on your analysis
+
+     c. Generate tags:
+        - Brainstorm a list of 15-20 potential tags, each with a brief justification
+        - Narrow down the list to 5-10 most relevant tags for easy filing and categorization
+
+     d. Identify potential article topics:
+        - List 8-10 topics discussed in the stream that could be expanded into full articles
+        - For each topic, provide a brief explanation of why it would make a good article and assign a relevance score (1-10)
+        - Select the top 3-5 topics based on relevance scores and provide a detailed explanation of what specific points they could cover
+
+     e. Identify potential YouTube shorts topics:
+        - List 8-10 topics from the stream that could be suitable for compact videos
+        - For each topic, briefly explain why it would be interesting to a larger audience and assign a relevance score (1-10)
+        - Select the top 3-5 topics based on relevance scores and explain in detail what key points they could cover in a short format
+
+     f. Summarize the stream:
+        - Write a detailed overview of the stream's content, covering multiple topics if applicable
+        - Highlight the main value propositions for viewers
+
+  4. After your analysis, present your findings in the following structured format:
+
+  <results>
+    <stream_sections>
+      <section>
+        <timestamp>[Start time - End time]</timestamp>
+        <topic>[Brief description of the topic discussed]</topic>
+        <summary>[More detailed overview of the section]</summary>
+      </section>
+      [Repeat for each section identified]
+    </stream_sections>
+
+    <key_information>
+      <speakers>[List main speakers and guests]</speakers>
+      <technologies>[List primary programming languages and technologies]</technologies>
+      <projects_and_tools>[List specific projects and tools mentioned]</projects_and_tools>
+      <quotes>
+        <quote>
+          <text>[Quote text]</text>
+          <citation>[Timestamp or context]</citation>
+        </quote>
+        [Repeat for each notable quote]
+      </quotes>
+    </key_information>
+
+    <classification>
+      <primary_focus>[Your assessment]</primary_focus>
+      <format>[Your assessment]</format>
+    </classification>
+
+    <tags>
+      <tag>[Tag 1]</tag>
+      <tag>[Tag 2]</tag>
+      [Repeat for each tag]
+    </tags>
+
+    <article_topics>
+      <topic>
+        <title>[Topic 1 title]</title>
+        <explanation>[Detailed explanation and potential points to cover]</explanation>
+      </topic>
+      [Repeat for each article topic]
+    </article_topics>
+
+    <youtube_shorts_topics>
+      <topic>
+        <title>[Topic 1 title]</title>
+        <explanation>[Explanation of interest to larger audience and key points]</explanation>
+      </topic>
+      [Repeat for each YouTube shorts topic]
+    </youtube_shorts_topics>
+
+    <summary>
+      [Your detailed overview of the stream's content and value]
+    </summary>
+
+    <title>
+      [Title under which to file the stream]
+    </title>
+  </results>
+
+  Ensure that your final output includes only the content within the <results> tags. Do not include any additional commentary or notes outside of these tags, and do not duplicate or rehash any of the work you did in the thinking block.
+
+  Output your analysis in the <file> tag format:
+  <file name="transcript_analysis.xml">
+  <!-- Insert the entire <results> XML structure here -->
+  </file>
+
+  Include <!-- all files emitted --> on a new line AFTER the last </file> tag.
+  If you cannot extract certain information or create a particular file due to missing data, explain the issue within <error> tags.
+
+  ---
+
+  {{ define "base_prompt" -}}
+  {{ if .title }}
+  The title of the stream is:
+  {{ .title }}
+  {{ end }}
+
+  Here is the transcript from the video:
+  <transcript>
+  {{ .transcript }}
+  </transcript>
+
+  {{ if .description }}
+  Additional context about this video:
+  <description>
+  {{ .description | join " " }}
+  </description>
+  {{ end }}
+
+  Please analyze this transcript according to the instructions provided, and output your analysis in a structured XML format within <file> tags.
+  {{- end }}
+
+  {{ template "base_prompt" . }}
+
+  {{ if .context }}
+  Additional Context:
+  {{ range .context }}
+  --- File: {{ .Path }} ---
+  {{ .Content }}
+  ---
+  {{- end }}
+  {{ end }}
+
+flags:
+  - name: context
+    type: fileList
+    help: Additional context from files
+  - name: transcript
+    type: string
+    help: "The transcript content from the video"
+    required: true
+  - name: title
+    type: string
+    help: "The title of the video"
+    required: false
+  - name: description
+    type: stringList
+    help: "Additional context or description about the video"
+    required: false 

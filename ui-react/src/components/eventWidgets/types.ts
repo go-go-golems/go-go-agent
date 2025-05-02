@@ -16,6 +16,7 @@ export interface EventSummaryWidgetProps extends EventWidgetProps {
 export interface EventTableWidgetProps extends EventWidgetProps {
   showCallIds?: boolean; // Existing prop from EventPayloadDetails
   compact?: boolean; // To control density if needed
+  className?: string;
 }
 
 // For specialized tab content in modals

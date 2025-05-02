@@ -29,6 +29,38 @@ import {
   NodeStatusChangedSummary,
   NodeStatusChangedTable
 } from './NodeStatusChanged';
+import {
+  NodeCreatedSummary,
+  NodeCreatedTable
+} from './NodeCreated';
+import {
+  NodeResultAvailableSummary,
+  NodeResultAvailableTable
+} from './NodeResultAvailable';
+import {
+  NodeAddedSummary,
+  NodeAddedTable
+} from './NodeAdded';
+import {
+  PlanReceivedSummary,
+  PlanReceivedTable
+} from './PlanReceived';
+import {
+  EdgeAddedSummary,
+  EdgeAddedTable
+} from './EdgeAdded';
+import {
+  InnerGraphBuiltSummary,
+  InnerGraphBuiltTable
+} from './InnerGraphBuilt';
+import {
+  ToolInvokedSummary,
+  ToolInvokedTable
+} from './ToolInvoked';
+import {
+  ToolReturnedSummary,
+  ToolReturnedTable
+} from './ToolReturned';
 
 // Storage objects for different widget types
 const summaryWidgetRegistry: Record<string, ComponentType<EventSummaryWidgetProps>> = {};
@@ -100,6 +132,56 @@ export function registerAllWidgets() {
     eventType: 'node_status_changed',
     summaryWidget: NodeStatusChangedSummary,
     tableWidget: NodeStatusChangedTable
+  });
+  
+  registerEventWidget({
+    eventType: 'node_created',
+    summaryWidget: NodeCreatedSummary,
+    tableWidget: NodeCreatedTable
+  });
+  
+  registerEventWidget({
+    eventType: 'node_result_available',
+    summaryWidget: NodeResultAvailableSummary,
+    tableWidget: NodeResultAvailableTable
+  });
+  
+  registerEventWidget({
+    eventType: 'node_added',
+    summaryWidget: NodeAddedSummary,
+    tableWidget: NodeAddedTable
+  });
+  
+  // Register Graph Structure events
+  registerEventWidget({
+    eventType: 'plan_received',
+    summaryWidget: PlanReceivedSummary,
+    tableWidget: PlanReceivedTable
+  });
+  
+  registerEventWidget({
+    eventType: 'edge_added',
+    summaryWidget: EdgeAddedSummary,
+    tableWidget: EdgeAddedTable
+  });
+  
+  registerEventWidget({
+    eventType: 'inner_graph_built',
+    summaryWidget: InnerGraphBuiltSummary,
+    tableWidget: InnerGraphBuiltTable
+  });
+  
+  // Register Tool events
+  registerEventWidget({
+    eventType: 'tool_invoked',
+    summaryWidget: ToolInvokedSummary,
+    tableWidget: ToolInvokedTable
+  });
+  
+  registerEventWidget({
+    eventType: 'tool_returned',
+    summaryWidget: ToolReturnedSummary,
+    tableWidget: ToolReturnedTable
   });
   
   // Register LLM call started widgets

@@ -2,8 +2,6 @@ package llm
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"sync"
 
 	"github.com/go-go-golems/geppetto/pkg/conversation"
@@ -69,16 +67,16 @@ func (m *MockLLM) Generate(ctx context.Context, messages []*conversation.Message
 	// INSERT_YOUR_CODE
 
 	// Store the input key in /tmp/input-key.txt
-	_ = os.WriteFile("/tmp/input-key.txt", []byte(key), 0644)
+	// _ = os.WriteFile("/tmp/input-key.txt", []byte(key), 0644)
 
-	// Store every response key in /tmp/response-key-xx.txt
-	// Find the next available xx
-	i := 0
-	for k := range m.responses {
-		filename := fmt.Sprintf("/tmp/response-key-%02d.txt", i)
-		_ = os.WriteFile(filename, []byte(k), 0644)
-		i++
-	}
+	// // Store every response key in /tmp/response-key-xx.txt
+	// // Find the next available xx
+	// i := 0
+	// for k := range m.responses {
+	// 	filename := fmt.Sprintf("/tmp/response-key-%02d.txt", i)
+	// 	_ = os.WriteFile(filename, []byte(k), 0644)
+	// 	i++
+	// }
 
 	// Default response
 	return conversation.NewChatMessage(conversation.RoleAssistant, "I don't know how to respond to that."), nil

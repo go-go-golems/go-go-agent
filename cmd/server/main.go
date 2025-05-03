@@ -7,9 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/go-go-golems/glazed/pkg/cli"
+	"github.com/go-go-golems/glazed/pkg/cmds"
+	"github.com/go-go-golems/glazed/pkg/cmds/layers"
+	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/help"
+	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -23,100 +28,47 @@ import (
 	"github.com/go-go-golems/go-go-agent/pkg/model"
 )
 
-var (
-	// Redis connection options
-	redisURL         string
-	redisPassword    string
-	redisDB          int
-	redisMaxRetries  int
-	redisDialTimeout time.Duration
-
-	// Transport selection
-	transportType string // Flag to choose "stream" or "pubsub"
-
-	// Stream subscription options
-	streamName        string
-	consumerGroup     string
-	consumerName      string
-	claimMinIdleTime  time.Duration
-	blockTime         time.Duration
-	maxIdleTime       time.Duration
-	nackResendSleep   time.Duration
-	commitOffsetAfter time.Duration
-	ackWait           time.Duration
-
-	// Pub/Sub subscription options
-	topicPattern string
-
-	// Database options
-	dbPath string
-
-	// HTTP server options
-	httpListenAddr string
-	staticFilesDir string
-	reloadSession  bool
-
-	// State manager options
-	maxEventHistorySize int
-
-	// Logging options
-	logLevel string
-)
-
-func main() {
-	rootCmd := &cobra.Command{
-		Use:   "server",
-		Short: "WriteHERE server with database manager",
-		Long:  `A server that handles WriteHERE events and stores them in a SQLite database.`,
-		RunE:  runServer,
-	}
-
-	// Add flags for Redis connection
-	rootCmd.Flags().StringVar(&redisURL, "redis-url", "localhost:6379", "Redis server URL")
-	rootCmd.Flags().StringVar(&redisPassword, "redis-password", "", "Redis server password")
-	rootCmd.Flags().IntVar(&redisDB, "redis-db", 0, "Redis database number")
-	rootCmd.Flags().IntVar(&redisMaxRetries, "redis-max-retries", 3, "Maximum number of Redis connection retries")
-	rootCmd.Flags().DurationVar(&redisDialTimeout, "redis-dial-timeout", 5*time.Second, "Redis connection timeout")
-
-	// Add flag for transport type
-	rootCmd.Flags().StringVar(&transportType, "transport-type", string(redis.TransportStream), "Redis transport type (stream or pubsub)")
-
-	// Add flags for stream configuration
-	rootCmd.Flags().StringVar(&streamName, "stream-name", "agent_events", "Redis stream name (used with transport-type=stream)")
-	rootCmd.Flags().StringVar(&consumerGroup, "consumer-group", "go_server_group", "Redis consumer group name (used with transport-type=stream)")
-	rootCmd.Flags().StringVar(&consumerName, "consumer-name", "go_server_consumer", "Redis consumer name (used with transport-type=stream)")
-	rootCmd.Flags().DurationVar(&claimMinIdleTime, "claim-min-idle-time", time.Minute, "Minimum idle time before claiming messages (used with transport-type=stream)")
-	rootCmd.Flags().DurationVar(&blockTime, "block-time", time.Second, "Block time for Redis XREADGROUP (used with transport-type=stream)")
-	rootCmd.Flags().DurationVar(&maxIdleTime, "max-idle-time", 5*time.Minute, "Maximum idle time for consumer (used with transport-type=stream)")
-	rootCmd.Flags().DurationVar(&nackResendSleep, "nack-resend-sleep", 2*time.Second, "Sleep time before retrying NACK'd message (used with transport-type=stream)")
-	rootCmd.Flags().DurationVar(&commitOffsetAfter, "commit-offset-after", 10*time.Second, "Interval between committing offsets (used with transport-type=stream)")
-	rootCmd.Flags().DurationVar(&ackWait, "ack-wait", 30*time.Second, "Time to wait for ACK before timing out")
-
-	// Add flags for Pub/Sub configuration
-	rootCmd.Flags().StringVar(&topicPattern, "topic-pattern", "agent_events:*", "Redis Pub/Sub topic pattern (used with transport-type=pubsub)")
-
-	// Add flag for database path
-	rootCmd.Flags().StringVar(&dbPath, "db-path", "./writehere.db", "Path to SQLite database file")
-
-	// Add flags for HTTP server
-	rootCmd.Flags().StringVar(&httpListenAddr, "http-listen-addr", ":9999", "HTTP server listen address")
-	rootCmd.Flags().StringVar(&staticFilesDir, "static-files-dir", "./ui-react/dist", "Path to static UI files")
-	rootCmd.Flags().BoolVar(&reloadSession, "reload-session", false, "Reload state from the latest session in the database")
-
-	// Add flags for state managers
-	rootCmd.Flags().IntVar(&maxEventHistorySize, "max-event-history", 1000, "Maximum number of events to keep in memory")
-
-	// Add flag for log level
-	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level (trace, debug, info, warn, error, fatal, panic)")
-
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+// ServerCommand implements the main server command using Glazed
+type ServerCommand struct {
+	*cmds.CommandDescription
 }
 
-func runServer(cmd *cobra.Command, args []string) error {
+// Ensure ServerCommand implements the Command interface
+var _ cmds.Command = (*ServerCommand)(nil)
+
+// ServerSettings holds the server-specific settings
+type ServerSettings struct {
+	DBPath          string `glazed.parameter:"db-path"`
+	HTTPListenAddr  string `glazed.parameter:"http-listen-addr"`
+	StaticFilesDir  string `glazed.parameter:"static-files-dir"`
+	ReloadSession   bool   `glazed.parameter:"reload-session"`
+	MaxEventHistory int    `glazed.parameter:"max-event-history"`
+	LogLevel        string `glazed.parameter:"log-level"`
+}
+
+func (c *ServerCommand) Run(
+	ctx context.Context,
+	parsedLayers *layers.ParsedLayers,
+	gp middlewares.Processor,
+) error {
+	// Get settings from all layers
+	serverSettings := &ServerSettings{}
+	if err := parsedLayers.InitializeStruct(layers.DefaultSlug, serverSettings); err != nil {
+		return err
+	}
+
+	redisSettings, err := redis.GetRedisSettingsFromParsedLayers(parsedLayers)
+	if err != nil {
+		return err
+	}
+
+	streamSettings, err := redis.GetStreamSettingsFromParsedLayers(parsedLayers)
+	if err != nil {
+		return err
+	}
+
 	// Setup logger with level from flag
-	level, err := zerolog.ParseLevel(logLevel)
+	level, err := zerolog.ParseLevel(serverSettings.LogLevel)
 	if err != nil {
 		return errors.Wrap(err, "invalid log level")
 	}
@@ -128,23 +80,23 @@ func runServer(cmd *cobra.Command, args []string) error {
 	log.Logger = logger
 
 	// Validate transport type
-	selectedTransportType := redis.TransportType(transportType)
+	selectedTransportType := redis.TransportType(streamSettings.TransportType)
 	if selectedTransportType != redis.TransportStream && selectedTransportType != redis.TransportPubSub {
 		return fmt.Errorf("invalid transport type: %s, must be %s or %s",
-			transportType, redis.TransportStream, redis.TransportPubSub)
+			streamSettings.TransportType, redis.TransportStream, redis.TransportPubSub)
 	}
 
 	logger.Info().
-		Str("redis_url", redisURL).
-		Str("transport_type", transportType).
-		Str("db_path", dbPath).
-		Str("http_listen_addr", httpListenAddr).
-		Str("log_level", logLevel).
-		Bool("reload_session", reloadSession).
+		Str("redis_url", redisSettings.URL).
+		Str("transport_type", streamSettings.TransportType).
+		Str("db_path", serverSettings.DBPath).
+		Str("http_listen_addr", serverSettings.HTTPListenAddr).
+		Str("log_level", serverSettings.LogLevel).
+		Bool("reload_session", serverSettings.ReloadSession).
 		Msg("Starting WriteHERE server")
 
 	// Setup graceful shutdown context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Setup signal handling
@@ -158,7 +110,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Initialize database manager
-	dbManager, err := db.NewDatabaseManager(dbPath)
+	dbManager, err := db.NewDatabaseManager(serverSettings.DBPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize database manager")
 	}
@@ -169,107 +121,29 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Initialize state managers
-	eventManager := state.NewEventManager(logger, maxEventHistorySize)
+	eventManager := state.NewEventManager(logger, serverSettings.MaxEventHistory)
 	graphManager := state.NewGraphManager(logger)
 
 	// If reload_session is enabled, load state from the database
-	if reloadSession {
+	if serverSettings.ReloadSession {
 		logger.Info().Msg("Reloading latest session from database...")
-		// Load graph state first (nodes and edges)
-		graphData, err := dbManager.GetLatestRunGraph(ctx)
-		if err != nil {
+
+		// Load graph state
+		if err := state.LoadGraphFromDB(ctx, logger, dbManager, graphManager); err != nil {
 			logger.Warn().Err(err).Msg("Failed to load graph state from database")
-		} else {
-			// Convert DB nodes/edges to state manager format
-			graphNodes := make([]state.GraphNode, 0, len(graphData.Nodes))
-			graphEdges := make([]state.GraphEdge, 0, len(graphData.Edges))
-
-			// Convert nodes
-			for nodeID, nodeJSON := range graphData.Nodes {
-				var node struct {
-					ID          string          `json:"id"`
-					NID         string          `json:"nid"`
-					Type        string          `json:"type"`
-					TaskType    string          `json:"task_type"`
-					Goal        string          `json:"goal"`
-					Status      string          `json:"status"`
-					Layer       int             `json:"layer"`
-					OuterNodeID string          `json:"outer_node_id"`
-					RootNodeID  string          `json:"root_node_id"`
-					Result      json.RawMessage `json:"result"`
-					Metadata    json.RawMessage `json:"metadata"`
-				}
-				if err := json.Unmarshal(nodeJSON, &node); err != nil {
-					logger.Warn().Err(err).Str("node_id", nodeID).Msg("Failed to unmarshal node JSON")
-					continue
-				}
-				graphNodes = append(graphNodes, state.GraphNode{
-					NodeID:      node.ID,
-					NodeNID:     node.NID,
-					NodeType:    node.Type,
-					TaskType:    node.TaskType,
-					TaskGoal:    node.Goal,
-					Status:      node.Status,
-					Layer:       node.Layer,
-					OuterNodeID: node.OuterNodeID,
-					RootNodeID:  node.RootNodeID,
-					Result:      node.Result,
-					Metadata:    node.Metadata,
-				})
-			}
-
-			// Convert edges
-			for _, edgeJSON := range graphData.Edges {
-				var edge struct {
-					ID        string          `json:"id"`
-					ParentID  string          `json:"parent_id"`
-					ChildID   string          `json:"child_id"`
-					ParentNID string          `json:"parent_nid"`
-					ChildNID  string          `json:"child_nid"`
-					Metadata  json.RawMessage `json:"metadata"`
-				}
-				if err := json.Unmarshal(edgeJSON, &edge); err != nil {
-					logger.Warn().Err(err).Msg("Failed to unmarshal edge JSON")
-					continue
-				}
-				graphEdges = append(graphEdges, state.GraphEdge{
-					ID:           edge.ID,
-					ParentNodeID: edge.ParentID,
-					ChildNodeID:  edge.ChildID,
-					ParentNID:    edge.ParentNID,
-					ChildNID:     edge.ChildNID,
-					Metadata:     edge.Metadata,
-				})
-			}
-
-			// Load state
-			graphManager.LoadStateFromDB(graphNodes, graphEdges)
 		}
 
 		// Load events
-		eventData, err := dbManager.GetLatestRunEvents(ctx)
-		if err != nil {
+		if err := state.LoadEventsFromDB(ctx, logger, dbManager, eventManager); err != nil {
 			logger.Warn().Err(err).Msg("Failed to load events from database")
-		} else {
-			// Convert DB events to model.Event objects
-			events := make([]model.Event, 0, len(eventData.Events))
-			for _, eventJSON := range eventData.Events {
-				var event model.Event
-				if err := json.Unmarshal(eventJSON, &event); err != nil {
-					logger.Warn().Err(err).Msg("Failed to unmarshal event JSON")
-					continue
-				}
-				events = append(events, event)
-			}
-			eventManager.LoadStateFromDB(events)
 		}
 	}
 
 	// Setup HTTP server configuration
 	httpConfig := server.DefaultHTTPServerConfig()
-	httpConfig.ListenAddr = httpListenAddr
-	httpConfig.StaticFilesDir = staticFilesDir
-	httpConfig.ReloadSession = reloadSession
+	httpConfig.ListenAddr = serverSettings.HTTPListenAddr
+	httpConfig.StaticFilesDir = serverSettings.StaticFilesDir
+	httpConfig.ReloadSession = serverSettings.ReloadSession
 
 	// Initialize HTTP server
 	httpServer := server.NewHTTPServer(httpConfig, logger, eventManager, graphManager)
@@ -301,29 +175,29 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Setup Redis router configuration
 	routerConfig := redis.DefaultRouterConfig()
-	routerConfig.RedisURL = redisURL
-	routerConfig.RedisPassword = redisPassword
-	routerConfig.RedisDB = redisDB
-	routerConfig.RedisMaxRetries = redisMaxRetries
-	routerConfig.RedisDialTimeout = redisDialTimeout
-	routerConfig.AckWait = ackWait
+	routerConfig.RedisURL = redisSettings.URL
+	routerConfig.RedisPassword = redisSettings.Password
+	routerConfig.RedisDB = redisSettings.DB
+	routerConfig.RedisMaxRetries = redisSettings.MaxRetries
+	routerConfig.RedisDialTimeout = redisSettings.DialTimeout
+	routerConfig.AckWait = streamSettings.AckWait
 	routerConfig.TransportType = selectedTransportType
 
 	// Set transport-specific config
 	switch selectedTransportType {
 	case redis.TransportStream:
-		routerConfig.StreamName = streamName
-		routerConfig.ConsumerGroup = consumerGroup
-		routerConfig.ConsumerName = consumerName
-		routerConfig.ClaimMinIdleTime = claimMinIdleTime
-		routerConfig.BlockTime = blockTime
-		routerConfig.MaxIdleTime = maxIdleTime
-		routerConfig.NackResendSleep = nackResendSleep
-		routerConfig.CommitOffsetAfter = commitOffsetAfter
-		logger.Info().Str("stream", streamName).Str("group", consumerGroup).Msg("Using Redis Stream transport")
+		routerConfig.StreamName = streamSettings.StreamName
+		routerConfig.ConsumerGroup = streamSettings.ConsumerGroup
+		routerConfig.ConsumerName = streamSettings.ConsumerName
+		routerConfig.ClaimMinIdleTime = streamSettings.ClaimMinIdleTime
+		routerConfig.BlockTime = streamSettings.BlockTime
+		routerConfig.MaxIdleTime = streamSettings.MaxIdleTime
+		routerConfig.NackResendSleep = streamSettings.NackResendSleep
+		routerConfig.CommitOffsetAfter = streamSettings.CommitOffsetAfter
+		logger.Info().Str("stream", streamSettings.StreamName).Str("group", streamSettings.ConsumerGroup).Msg("Using Redis Stream transport")
 	case redis.TransportPubSub:
-		routerConfig.TopicPattern = topicPattern
-		logger.Info().Str("topic_pattern", topicPattern).Msg("Using Redis Pub/Sub transport")
+		routerConfig.TopicPattern = streamSettings.TopicPattern
+		logger.Info().Str("topic_pattern", streamSettings.TopicPattern).Msg("Using Redis Pub/Sub transport")
 	}
 
 	// Create the Redis router
@@ -371,4 +245,104 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	logger.Info().Msg("Server shut down complete.")
 	return err // Return the error that caused the shutdown, or nil if shutdown was graceful
+}
+
+// NewServerCommand creates a new server command with all parameter layers
+func NewServerCommand() (*ServerCommand, error) {
+	// Create Redis layer
+	redisLayer, err := redis.NewRedisLayer()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create stream layer
+	streamLayer, err := redis.NewStreamLayer()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create command description with all parameters
+	cmdDesc := cmds.NewCommandDescription(
+		"server",
+		cmds.WithShort("WriteHERE server with database manager"),
+		cmds.WithLong(`A server that handles WriteHERE events and stores them in a SQLite database.
+The server supports both Redis Streams and Pub/Sub for message transport.`),
+		cmds.WithFlags(
+			parameters.NewParameterDefinition(
+				"db-path",
+				parameters.ParameterTypeString,
+				parameters.WithHelp("Path to SQLite database file"),
+				parameters.WithDefault("./writehere.db"),
+			),
+			parameters.NewParameterDefinition(
+				"http-listen-addr",
+				parameters.ParameterTypeString,
+				parameters.WithHelp("HTTP server listen address"),
+				parameters.WithDefault(":9999"),
+			),
+			parameters.NewParameterDefinition(
+				"static-files-dir",
+				parameters.ParameterTypeString,
+				parameters.WithHelp("Path to static UI files"),
+				parameters.WithDefault("./ui-react/dist"),
+			),
+			parameters.NewParameterDefinition(
+				"reload-session",
+				parameters.ParameterTypeBool,
+				parameters.WithHelp("Reload state from the latest session in the database"),
+				parameters.WithDefault(false),
+			),
+			parameters.NewParameterDefinition(
+				"max-event-history",
+				parameters.ParameterTypeInteger,
+				parameters.WithHelp("Maximum number of events to keep in memory"),
+				parameters.WithDefault(1000),
+			),
+			parameters.NewParameterDefinition(
+				"log-level",
+				parameters.ParameterTypeChoice,
+				parameters.WithHelp("Log level (trace, debug, info, warn, error, fatal, panic)"),
+				parameters.WithDefault("info"),
+				parameters.WithChoices("trace", "debug", "info", "warn", "error", "fatal", "panic"),
+			),
+		),
+		cmds.WithLayersList(redisLayer, streamLayer),
+	)
+
+	return &ServerCommand{
+		CommandDescription: cmdDesc,
+	}, nil
+}
+
+func main() {
+	// Create root command
+	rootCmd := &cobra.Command{
+		Use:   "go-go-agent",
+		Short: "WriteHERE agent and server",
+	}
+
+	// Initialize help system
+	helpSystem := help.NewHelpSystem()
+	helpSystem.SetupCobraRootCommand(rootCmd)
+
+	// Create server command
+	serverCmd, err := NewServerCommand()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating server command: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Convert to Cobra command
+	cobraCmd, err := cli.BuildCobraCommandFromCommand(serverCmd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error building cobra command: %v\n", err)
+		os.Exit(1)
+	}
+
+	rootCmd.AddCommand(cobraCmd)
+
+	// Execute
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

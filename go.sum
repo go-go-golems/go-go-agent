@@ -91,8 +91,8 @@ github.com/go-go-golems/geppetto v0.4.50 h1:WiZ/SYmNxguSypRgQE6FC97krcHcih4CLdWr
 github.com/go-go-golems/geppetto v0.4.50/go.mod h1:E78+Kgi0sIq6Yqq+N3bjZc5Q06WzIEGizRiUcQ+Rgb4=
 github.com/go-go-golems/glazed v0.5.48 h1:+3Ten55liFn8HxGDBccpp76Lg6Ws8OSR8jLHHKUojoI=
 github.com/go-go-golems/glazed v0.5.48/go.mod h1:9BLzfCpwtvcf+JESxhT3QBCAPt2H2Yk3NDi0FBhCwQw=
-github.com/go-go-golems/go-emrichen v0.0.5 h1:zCmwTjvj7vtNWKj9JC1OYOgLiQ2OYZSHLZR1XoZv534=
-github.com/go-go-golems/go-emrichen v0.0.5/go.mod h1:SKKb5juUGwK7rTWFXYFrjFdM9GxfXdRCY9Lhc2MHx8U=
+github.com/go-go-golems/go-emrichen v0.0.7 h1:RSJajEihqieIWEo/X63DBY5N5tDl9JuZrFtxP2zImic=
+github.com/go-go-golems/go-emrichen v0.0.7/go.mod h1:2P4dTvCe7ystMW7mR2Wu58XXw5mF/0lH8lm6APYFpYQ=
 github.com/go-go-golems/pinocchio v0.4.33 h1:TDE2glKMftmstwd8TeKx08Q9UV5rnf+ZAIytz4edXG8=
 github.com/go-go-golems/pinocchio v0.4.33/go.mod h1:FxvGeklPJhoTj7czsB/MHyOAqgKfa4Mcsv6cYt5xIrM=
 github.com/go-openapi/errors v0.22.0 h1:c4xY/OLxUBSTiepAg3j/MHuAv5mJhnf53LLMWFB+u/w=

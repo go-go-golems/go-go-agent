@@ -39,6 +39,7 @@ type PlanAndExecuteAgentSettings struct {
 // NewAgent creates a new PlanAndExecuteAgent.
 func (f *PlanAndExecuteAgentFactory) NewAgent(
 	ctx context.Context,
+	cmd Command,
 	parsedLayers *layers.ParsedLayers,
 	baseModel llm.LLM,
 ) (Agent, error) {
@@ -47,8 +48,32 @@ func (f *PlanAndExecuteAgentFactory) NewAgent(
 	if err != nil {
 		return nil, err
 	}
-	// Use the provided llmModel for both planner and executor for now
-	return NewPlanAndExecuteAgent(f.planningModel, f.executionModel, settings.MaxIterations), nil
+
+	agentOptions, err := cmd.RenderAgentOptions(parsedLayers.GetDataMap(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Example of using agent options from command
+	if cmdMaxIter, ok := agentOptions["max-iterations"]; ok {
+		if maxIter, ok := cmdMaxIter.(int); ok {
+			settings.MaxIterations = maxIter
+		}
+	}
+
+	// Use the provided models from factory
+	planningModel := f.planningModel
+	executionModel := f.executionModel
+
+	// If no dedicated models are set in the factory, use the base model for both
+	if planningModel == nil {
+		planningModel = baseModel
+	}
+	if executionModel == nil {
+		executionModel = baseModel
+	}
+
+	return NewPlanAndExecuteAgent(planningModel, executionModel, settings.MaxIterations), nil
 }
 
 // CreateLayers defines the Glazed parameter layers for the PlanAndExecuteAgent.

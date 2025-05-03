@@ -14,8 +14,11 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/helpers/templating"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
+	glazed_settings "github.com/go-go-golems/glazed/pkg/settings"
+	"github.com/go-go-golems/go-emrichen/pkg/emrichen"
 	"github.com/go-go-golems/go-go-agent/goagent/agent"
 	"github.com/go-go-golems/go-go-agent/goagent/llm"
+	"github.com/go-go-golems/go-go-agent/goagent/types"
 	pinocchio_cmds "github.com/go-go-golems/pinocchio/pkg/cmds"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -25,17 +28,19 @@ import (
 
 // AgentCommand is a command that encapsulates agent execution configuration.
 // It serves as the base for WriterAgentCommand and GlazedAgentCommand.
-// It doesn't implement the Run methods directly.
 type AgentCommand struct {
-	*cmds.CommandDescription
+	*cmds.CommandDescription `yaml:",inline"`
 
 	// Agent-specific fields
 	AgentType    string
 	SystemPrompt string
 	Prompt       string // Template string for the initial prompt
 	Tools        []string
-	AgentOptions map[string]interface{}
+	AgentOptions *types.RawNode
 }
+
+// Ensure AgentCommand implements the types.AgentCommandDescription interface
+var _ agent.Command = &AgentCommand{}
 
 // WriterAgentCommand is an AgentCommand designed to output plain text results.
 type WriterAgentCommand struct {
@@ -85,7 +90,7 @@ func WithTools(tools []string) AgentCommandOption {
 }
 
 // WithAgentOptions sets additional agent options
-func WithAgentOptions(options map[string]interface{}) AgentCommandOption {
+func WithAgentOptions(options *types.RawNode) AgentCommandOption {
 	return func(a *AgentCommand) {
 		a.AgentOptions = options
 	}
@@ -110,7 +115,6 @@ func NewAgentCommand(
 
 	ret := &AgentCommand{
 		CommandDescription: description,
-		AgentOptions:       make(map[string]interface{}),
 	}
 
 	for _, option := range options {
@@ -135,7 +139,7 @@ func NewAgentCommand(
 	}
 
 	// Append agent-specific layers to the command description
-	description.Layers.AppendLayers(agentLayers...)
+	description.Layers.AppendLayers(agentLayers...) // TODO(manuel): Remove this
 
 	return ret, nil
 }
@@ -161,6 +165,13 @@ func NewGlazedAgentCommand(
 	if err != nil {
 		return nil, err
 	}
+
+	glazedLayer, err := glazed_settings.NewGlazedParameterLayers()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create glazed parameter layers")
+	}
+	agentCmd.Layers.AppendLayers(glazedLayer)
+
 	return &GlazedAgentCommand{AgentCommand: agentCmd}, nil
 }
 
@@ -215,8 +226,8 @@ func (gac *GlazedAgentCommand) RunIntoGlazeProcessor(
 		return errors.Wrapf(err, "failed to get agent factory for type '%s'", gac.AgentCommand.AgentType)
 	}
 
-	// 3. Create Agent Instance using Factory
-	agentInstance, err := factory.NewAgent(ctx, parsedLayers, llmModel)
+	// 3. Create Agent Instance using Factory - pass the AgentCommand directly
+	agentInstance, err := factory.NewAgent(ctx, gac.AgentCommand, parsedLayers, llmModel)
 	if err != nil {
 		return errors.Wrap(err, "failed to create agent instance")
 	}
@@ -238,9 +249,6 @@ func (gac *GlazedAgentCommand) RunIntoGlazeProcessor(
 	err = glazedAgent.RunIntoGlazeProcessor(ctx, initialPrompt, gp)
 	if err != nil {
 		log.Error().Err(err).Str("agentType", gac.AgentCommand.AgentType).Msg("GlazedAgent RunIntoGlazeProcessor failed")
-		return errors.Wrap(err, "failed to run agent into glaze processor")
-	} else {
-		log.Info().Str("agentType", gac.AgentCommand.AgentType).Msg("GlazedAgent logic finished")
 	}
 
 	return nil
@@ -290,8 +298,8 @@ func (wac *WriterAgentCommand) RunIntoWriter(
 		return errors.Wrapf(err, "failed to get agent factory for type '%s'", wac.AgentCommand.AgentType)
 	}
 
-	// 7. Create Agent Instance using Factory
-	agentInstance, err := factory.NewAgent(ctx, parsedLayers, llmModel)
+	// 7. Create Agent Instance using Factory - pass the AgentCommand directly
+	agentInstance, err := factory.NewAgent(ctx, wac.AgentCommand, parsedLayers, llmModel)
 	if err != nil {
 		_ = router.Close()
 		return errors.Wrap(err, "failed to create agent instance")
@@ -372,17 +380,19 @@ func (wac *WriterAgentCommand) RunIntoWriter(
 }
 
 // renderInitialPrompt renders the command's Prompt template string
-// using the parameters from the default layer.
+// using the templating library, not emrichen
 func (a *AgentCommand) renderInitialPrompt(parsedLayers *layers.ParsedLayers) (string, error) {
 	if a.Prompt == "" {
-		// Or handle this case differently, maybe require a prompt?
 		return "", errors.New("cannot run agent without a prompt template defined in the command")
 	}
 
-	params := parsedLayers.GetDefaultParameterLayer().Parameters.ToMap()
+	// Simple string replace with parameter values
+	prompt := a.Prompt
+	params := parsedLayers.GetDataMap()
 
-	// Use the Glazed templating helper which includes Sprig functions
-	tmpl, err := templating.CreateTemplate("prompt").Parse(a.Prompt)
+	// Use the glazed templating package with Sprig functions
+	tmpl := templating.CreateTemplate("prompt")
+	tmpl, err := tmpl.Parse(prompt)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse prompt template")
 	}
@@ -394,4 +404,70 @@ func (a *AgentCommand) renderInitialPrompt(parsedLayers *layers.ParsedLayers) (s
 	}
 
 	return buf.String(), nil
+}
+
+// Implementation of the Command interface
+
+// GetCommandDescription returns the command description
+func (a *AgentCommand) GetCommandDescription() *cmds.CommandDescription {
+	return a.CommandDescription
+}
+
+// GetAgentType returns the agent type
+func (a *AgentCommand) GetAgentType() string {
+	return a.AgentType
+}
+
+// GetSystemPrompt returns the system prompt
+func (a *AgentCommand) GetSystemPrompt() string {
+	return a.SystemPrompt
+}
+
+// GetPrompt returns the prompt template
+func (a *AgentCommand) GetPrompt() string {
+	return a.Prompt
+}
+
+// GetTools returns the tools to use
+func (a *AgentCommand) GetTools() []string {
+	return a.Tools
+}
+
+// RenderAgentOptions renders the agent options using emrichen
+func (a *AgentCommand) RenderAgentOptions(parameters map[string]interface{}, tags map[string]interface{}) (map[string]interface{}, error) {
+	if a.AgentOptions == nil {
+		return map[string]interface{}{}, nil
+	}
+
+	// Convert tags to emrichen tag funcs
+	additionalTags := map[string]emrichen.TagFunc{}
+	for name, tag := range tags {
+		if tagFunc, ok := tag.(emrichen.TagFunc); ok {
+			additionalTags[name] = tagFunc
+		}
+	}
+
+	// Create an emrichen interpreter
+	ei, err := emrichen.NewInterpreter(
+		emrichen.WithVars(parameters),
+		emrichen.WithAdditionalTags(additionalTags),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create emrichen interpreter")
+	}
+
+	// Process the raw node
+	v, err := ei.Process(a.AgentOptions.GetNode())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not process emrichen node for agent options")
+	}
+
+	// Decode the processed node into a map
+	result := map[string]interface{}{}
+	err = v.Decode(&result)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not decode agent options node")
+	}
+
+	return result, nil
 }

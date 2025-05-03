@@ -8,6 +8,7 @@ require (
 	github.com/go-go-golems/clay v0.1.39
 	github.com/go-go-golems/geppetto v0.4.50
 	github.com/go-go-golems/glazed v0.5.48
+	github.com/go-go-golems/go-emrichen v0.0.5
 	github.com/go-go-golems/pinocchio v0.4.33
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -57,7 +58,6 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-go-golems/bobatea v0.0.18 // indirect
-	github.com/go-go-golems/go-emrichen v0.0.5 // indirect
 	github.com/go-openapi/errors v0.22.0 // indirect
 	github.com/go-openapi/strfmt v0.23.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect

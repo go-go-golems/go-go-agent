@@ -2,10 +2,26 @@ name: youtube-transcript-processor
 short: "Analyzes video transcripts to extract key information and generate insights"
 long: |
   An agent that analyzes programming/technical video transcripts to extract key information, classify content, identify potential topics for articles and YouTube shorts, and provide detailed summaries.
+flags:
+  - name: context
+    type: fileList
+    help: Additional context from files
+  - name: transcript
+    type: string
+    help: "The transcript content from the video"
+    required: true
+  - name: title
+    type: string
+    help: "The title of the video"
+    required: false
+  - name: description
+    type: stringList
+    help: "Additional context or description about the video"
+    required: false 
 
 type: agent
 command-type: glazed # Use glazed for structured output
-agent-type: file-collection # Suitable for generating structured output files
+agent-type: structured-data # Suitable for generating structured output files
 
 system-prompt: |
   You are an AI assistant tasked with analyzing programming/technical video transcripts and extracting valuable insights.
@@ -16,7 +32,7 @@ prompt: |
   Here's the transcript of the stream:
 
   <transcript>
-  {{TRANSCRIPT}}
+  {{.transcript}}
   </transcript>
 
   The title of the stream is:
@@ -62,74 +78,58 @@ prompt: |
 
   4. After your analysis, present your findings in the following structured format:
 
-  <results>
+
     <stream_sections>
       <section>
-        <timestamp>[Start time - End time]</timestamp>
-        <topic>[Brief description of the topic discussed]</topic>
-        <summary>[More detailed overview of the section]</summary>
+        <timestamp>Start time - End time (Format: HH:MM:SS)</timestamp>
+        <topic>Brief description of the topic discussed</topic>
+        <summary>More detailed overview of the section</summary>
       </section>
-      [Repeat for each section identified]
     </stream_sections>
 
     <key_information>
-      <speakers>[List main speakers and guests]</speakers>
-      <technologies>[List primary programming languages and technologies]</technologies>
-      <projects_and_tools>[List specific projects and tools mentioned]</projects_and_tools>
+      <speakers>List main speakers and guests</speakers>
+      <technologies>List primary programming languages and technologies</technologies>
+      <projects_and_tools>List specific projects and tools mentioned</projects_and_tools>
       <quotes>
         <quote>
-          <text>[Quote text]</text>
-          <citation>[Timestamp or context]</citation>
+          <text>Quote text</text>
+          <citation>Timestamp (Format: HH:MM:SS)</citation>
         </quote>
-        [Repeat for each notable quote]
       </quotes>
     </key_information>
 
     <classification>
-      <primary_focus>[Your assessment]</primary_focus>
-      <format>[Your assessment]</format>
+      <primary_focus>Your assessment</primary_focus>
+      <format>Your assessment</format>
     </classification>
 
     <tags>
-      <tag>[Tag 1]</tag>
-      <tag>[Tag 2]</tag>
-      [Repeat for each tag]
+      <tag>Tag 1</tag>
+      <tag>Tag 2</tag>
     </tags>
 
     <article_topics>
       <topic>
-        <title>[Topic 1 title]</title>
-        <explanation>[Detailed explanation and potential points to cover]</explanation>
+        <title>Topic 1 title</title>
+        <explanation>Detailed explanation and potential points to cover</explanation>
       </topic>
-      [Repeat for each article topic]
     </article_topics>
 
     <youtube_shorts_topics>
       <topic>
-        <title>[Topic 1 title]</title>
-        <explanation>[Explanation of interest to larger audience and key points]</explanation>
+        <title>Topic 1 title</title>
+        <explanation>Explanation of interest to larger audience and key points</explanation>
       </topic>
-      [Repeat for each YouTube shorts topic]
     </youtube_shorts_topics>
 
     <summary>
-      [Your detailed overview of the stream's content and value]
+      Your detailed overview of the stream's content and value
     </summary>
 
     <title>
-      [Title under which to file the stream]
+      Title under which to file the stream
     </title>
-  </results>
-
-  Ensure that your final output includes only the content within the <results> tags. Do not include any additional commentary or notes outside of these tags, and do not duplicate or rehash any of the work you did in the thinking block.
-
-  Output your analysis in the <file> tag format:
-  <file name="transcript_analysis.xml">
-  <!-- Insert the entire <results> XML structure here -->
-  </file>
-
-  Include <!-- all files emitted --> on a new line AFTER the last </file> tag.
-  If you cannot extract certain information or create a particular file due to missing data, explain the issue within <error> tags.
 
   ---
 
@@ -151,7 +151,7 @@ prompt: |
   </description>
   {{ end }}
 
-  Please analyze this transcript according to the instructions provided, and output your analysis in a structured XML format within <file> tags.
+  Please analyze this transcript according to the instructions provided, and output your analysis in a structured XML format.
   {{- end }}
 
   {{ template "base_prompt" . }}
@@ -165,19 +165,95 @@ prompt: |
   {{- end }}
   {{ end }}
 
-flags:
-  - name: context
-    type: fileList
-    help: Additional context from files
-  - name: transcript
-    type: string
-    help: "The transcript content from the video"
-    required: true
-  - name: title
-    type: string
-    help: "The title of the video"
-    required: false
-  - name: description
-    type: stringList
-    help: "Additional context or description about the video"
-    required: false 
+agent-options:
+  template: |
+    # {{ if .title -}}{{ .title._text }}{{ else -}}Video Analysis Report{{ end }}
+
+    {{ if .stream_sections -}}
+    ## Stream Sections
+
+    {{ range .stream_sections._children.section -}}
+    ### {{ .timestamp._text }} - {{ .topic._text }}
+
+    {{ .summary._text }}
+    {{ end -}}
+    {{ end }}
+
+    {{ if .key_information -}}
+    ## Key Information
+
+    {{ if .key_information._children.speakers -}}
+    ### Speakers
+
+    {{ range .key_information._children.speakers -}}
+    - {{ . }}
+    {{- end }}
+    {{- end }}
+    {{ end }}
+
+    {{ if .key_information._children.technologies -}}
+    ### Technologies Discussed
+
+    {{ range .key_information._children.technologies -}}
+    - {{ . }}
+    {{ end -}}
+    {{ end }}
+
+    {{ if .key_information._children.projects_and_tools -}}
+    ### Projects and Tools
+
+    {{ range .key_information._children.projects_and_tools -}}
+    - {{ . }}
+    {{ end -}}
+    {{ end }}
+
+    {{ if .key_information._children.quotes -}}
+    ### Notable Quotes
+
+    {{ range .key_information._children.quotes._children.quote -}}
+    {{ if ._children.text._text -}}
+    > "{{ ._children.text._text }}"
+    > *{{ if ._children.citation._text -}}{{ ._children.citation._text }}{{ else -}}No citation{{ end }}*
+    {{ end -}}
+    {{ end -}}
+    {{- end }}
+
+    {{ if .classification -}}
+    ## Classification
+
+    - **Primary Focus**: {{ .classification._children.primary_focus._text }}
+    - **Format**: {{ .classification._children.format._text }}
+    {{ end }}
+
+    {{ if .tags -}}
+    ## Tags
+
+    {{ range .tags._children.tag -}}`{{ ._text }}` {{ end }}
+    {{ end }}
+
+    {{ if .article_topics -}}
+    ## Potential Article Topics
+
+    {{ range .article_topics._children.topic -}}
+    ### {{ ._children.title._text }}
+
+    {{ ._children.explanation._text }}
+
+    {{ end }}
+    {{- end }}
+
+    {{ if .youtube_shorts_topics -}}
+    ## Potential YouTube Shorts Topics
+
+    {{ range .youtube_shorts_topics._children.topic -}}
+    ### {{ ._children.title._text }}
+
+    {{ ._children.explanation._text }}
+    {{ end -}}
+    {{ end }}
+
+    {{ if .summary -}}
+    ## Summary
+
+    {{ .summary._text }}
+    {{ end }}

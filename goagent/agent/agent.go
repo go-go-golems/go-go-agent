@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 
+	"github.com/go-go-golems/glazed/pkg/cmds"
+	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/go-go-agent/goagent/llm"
 	"github.com/go-go-golems/go-go-agent/goagent/memory"
@@ -10,11 +12,22 @@ import (
 	"github.com/go-go-golems/go-go-agent/goagent/tracing"
 )
 
-// Agent interface defines the core functionality of an agent
+// Command is the interface that agent command implementations must satisfy
+// to be used with the agent factory
+type Command interface {
+	// Fields needed by agent implementations
+	GetCommandDescription() *cmds.CommandDescription
+	GetAgentType() string
+	GetSystemPrompt() string
+	GetPrompt() string
+	GetTools() []string
+	RenderAgentOptions(parameters map[string]interface{}, tags map[string]interface{}) (map[string]interface{}, error)
+}
+
+// Agent is the base interface that all agent implementations must satisfy
 type Agent interface {
-	// Run executes the agent with the given input and returns the result string.
-	// This is suitable for agents producing simple text output.
-	Run(ctx context.Context, input string) (string, error)
+	// Run executes the agent with a given prompt and returns the result as a string
+	Run(ctx context.Context, prompt string) (string, error)
 
 	// AddTool adds a tool to the agent
 	AddTool(tool tools.Tool) error
@@ -28,13 +41,19 @@ type WriterAgent interface {
 	Agent
 }
 
-// GlazedAgent defines an agent capable of outputting structured data
-// directly into a Glaze processor.
+// GlazedAgent is an agent that produces structured data output
 type GlazedAgent interface {
-	Agent // Embeds the basic Agent interface
+	Agent
+	// RunIntoGlazeProcessor processes the agent's output into a Glaze processor
+	RunIntoGlazeProcessor(ctx context.Context, prompt string, gp middlewares.Processor) error
+}
 
-	// RunIntoGlazeProcessor executes the agent and streams structured results.
-	RunIntoGlazeProcessor(ctx context.Context, input string, gp middlewares.Processor) error
+// Factory is responsible for creating agent instances
+type Factory interface {
+	// NewAgent creates a new agent instance
+	NewAgent(ctx context.Context, cmd Command, parsedLayers *layers.ParsedLayers, llm llm.LLM) (Agent, error)
+	// CreateLayers returns the parameter layers needed by this agent
+	CreateLayers() ([]*layers.ParameterLayer, error)
 }
 
 // BaseAgent provides common functionality for all agents

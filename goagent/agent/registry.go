@@ -9,11 +9,6 @@ import (
 	"github.com/go-go-golems/go-go-agent/goagent/llm"
 )
 
-type AgentFactory interface {
-	NewAgent(ctx context.Context, parsedLayers *layers.ParsedLayers, llmModel llm.LLM) (Agent, error)
-	CreateLayers() ([]layers.ParameterLayer, error)
-}
-
 // AgentTypeRegistry manages the registration and retrieval of agent types
 type AgentTypeRegistry interface {
 	// Register registers a new agent constructor with the given name
@@ -99,4 +94,10 @@ func init() {
 	RegisterAgentType(FileCollectionAgentType, &FileCollectionAgentFactory{})
 
 	RegisterAgentType(StructuredDataAgentType, &StructuredDataAgentFactory{})
+}
+
+type AgentFactory interface {
+	// Use the concrete types.AgentCommand
+	NewAgent(ctx context.Context, cmd Command, parsedLayers *layers.ParsedLayers, llmModel llm.LLM) (Agent, error)
+	CreateLayers() ([]layers.ParameterLayer, error)
 }

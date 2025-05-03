@@ -7,7 +7,7 @@ flags:
     type: fileList
     help: Additional context from files
   - name: transcript
-    type: string
+    type: stringFromFile
     help: "The transcript content from the video"
     required: true
   - name: title

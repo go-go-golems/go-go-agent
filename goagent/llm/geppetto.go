@@ -92,11 +92,6 @@ func createChatStep(
 		return nil, errors.Wrap(err, "failed to create chat step in factory")
 	}
 
-	step, err = stepSettings.Chat.WrapWithCache(step)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to wrap step with cache")
-	}
-
 	// Add publisher if provided
 	if publisher != nil && topicID != "" {
 		log.Debug().Str("topic", topicID).Msg("Adding published topic to step")

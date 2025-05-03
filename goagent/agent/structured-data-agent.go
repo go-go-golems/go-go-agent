@@ -33,6 +33,7 @@ type StructuredDataAgentSettings struct {
 	MaxIterations  int    `glazed.parameter:"max-iterations"`
 	OutputTemplate string `glazed.parameter:"output-template,string-to-file"` // Template file path
 	Render         bool   `glazed.parameter:"render"`
+	Raw            bool   `glazed.parameter:"raw"`
 }
 
 // NewAgent creates a new StructuredDataAgent.
@@ -100,6 +101,12 @@ func (f *StructuredDataAgentFactory) CreateLayers() ([]layers.ParameterLayer, er
 				parameters.ParameterTypeBool,
 				parameters.WithHelp("Whether to render the output using the template"),
 				parameters.WithDefault(true),
+			),
+			parameters.NewParameterDefinition(
+				"raw",
+				parameters.ParameterTypeBool,
+				parameters.WithHelp("Whether to return the raw LLM response"),
+				parameters.WithDefault(false),
 			),
 		),
 	)
@@ -300,6 +307,8 @@ func extractXMLData(xmlString string) ([]Node, error) {
 
 // XXX How can we chain validators. custom parser error. Or maybe just as part of the result type, so that many agents can share data.
 // something that can render to different "types" (for examples a map or a set of files or a string or an image, etc...) Including the raw LLM inference.
+// XXX need to know why the stream finished
+// XXX caching configurable
 
 // Run executes the core structured data extraction logic.
 func (a *StructuredDataAgent) runInternal(ctx context.Context, input string) (map[string]interface{}, error) {
@@ -322,6 +331,11 @@ func (a *StructuredDataAgent) runInternal(ctx context.Context, input string) (ma
 	}
 
 	response := responseMsg.Content.String()
+
+	if a.settings.Raw {
+		fmt.Println("response", response)
+		return nil, nil
+	}
 
 	// Extract structured data from the response using the new XML parser
 	nodes, err := extractXMLData(response)
@@ -389,6 +403,10 @@ func (a *StructuredDataAgent) RunIntoWriter(ctx context.Context, input string, w
 		return errors.Wrap(runErr, "agent run failed before writing")
 	}
 
+	if a.extractedData == nil {
+		return nil
+	}
+
 	// Check if data was successfully parsed
 	if a.extractedData == nil {
 		errMsg := "No data was parsed, cannot render template."
@@ -444,6 +462,9 @@ func (a *StructuredDataAgent) RunIntoGlazeProcessor(
 
 	// Run the agent to extract data
 	values, runErr := a.runInternal(ctx, input)
+	if values == nil {
+		return nil
+	}
 	if runErr != nil {
 		a.tracer.LogEvent(ctx, types.Event{
 			Type: "run_error_in_glazed_processor",

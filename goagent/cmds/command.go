@@ -1,14 +1,18 @@
 package cmds
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/go-go-golems/geppetto/pkg/events"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	"github.com/go-go-golems/geppetto/pkg/helpers"
 	"github.com/go-go-golems/geppetto/pkg/steps/ai/settings"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
@@ -19,11 +23,15 @@ import (
 	"github.com/go-go-golems/go-go-agent/goagent/agent"
 	"github.com/go-go-golems/go-go-agent/goagent/llm"
 	"github.com/go-go-golems/go-go-agent/goagent/types"
+	"github.com/go-go-golems/go-go-agent/pkg/eventbus"
+	events "github.com/go-go-golems/go-go-agent/proto"
 	pinocchio_cmds "github.com/go-go-golems/pinocchio/pkg/cmds"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // AgentCommand is a command that encapsulates agent execution configuration.
@@ -175,25 +183,75 @@ func NewGlazedAgentCommand(
 	return &GlazedAgentCommand{AgentCommand: agentCmd}, nil
 }
 
-// prepareLlm prepares the LLM model and related settings.
-// It no longer creates the agent itself.
-func (a *AgentCommand) prepareLlm(
+// RunMode determines how the agent command should execute and output results.
+// This affects whether the event bus and router are used.
+type RunMode int
+
+const (
+	RunModeWriter RunMode = iota // Output plain text, uses event bus + stdout handler
+	RunModeGlazed                // Output structured data, does not use event bus
+)
+
+// prepareLlmAndEventBus prepares the LLM model, event bus, and related settings.
+func (a *AgentCommand) prepareLlmAndEventBus(
 	ctx context.Context,
 	parsedLayers *layers.ParsedLayers,
-	publisher message.Publisher,
-	topicID string,
-) (llm.LLM, *settings.StepSettings, error) {
+	runMode RunMode,
+	runID string, // Pass runID for event association
+) (llm.LLM, *settings.StepSettings, *eventbus.EventBus, *message.Router, string, error) {
 	// Create StepSettings from parsed layers for LLM creation
 	stepSettings, err := settings.NewStepSettingsFromParsedLayers(parsedLayers)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create step settings from parsed layers")
+		return nil, nil, nil, nil, "", errors.Wrap(err, "failed to create step settings from parsed layers")
 	}
 
-	llmOptions := []llm.GeppettoLLMOption{}
-	// Only configure publisher if it's provided
-	if publisher != nil && topicID != "" {
-		stepSettings.Chat.Stream = true
-		llmOptions = append(llmOptions, llm.WithPublisherAndTopic(publisher, topicID))
+	llmOptions := []llm.GeppettoLLMOption{
+		llm.WithRunID(runID),
+	}
+	var eb *eventbus.EventBus
+	var router *message.Router
+	var topicID string
+
+	// Setup EventBus and Router only for Writer Mode
+	if runMode == RunModeWriter {
+		// Create a simple GoChannel pub/sub for local event handling
+		logger := helpers.NewWatermill(log.Logger)
+		pubSub := gochannel.NewGoChannel(gochannel.Config{}, logger)
+
+		topicID = fmt.Sprintf("%s-agent-events-%s", a.Name, runID)
+
+		// Create the EventBus
+		eb, err = eventbus.NewEventBus(
+			eventbus.WithPublisher(pubSub),
+			eventbus.WithTopic(topicID),
+			// Use DefaultJSONEncoder for human-readable stdout printing
+			eventbus.WithEncoder(eventbus.DefaultJSONEncoder),
+		)
+		if err != nil {
+			return nil, nil, nil, nil, "", errors.Wrap(err, "failed to create event bus")
+		}
+
+		// Create and configure the router
+		router, err = message.NewRouter(message.RouterConfig{}, logger)
+		if err != nil {
+			_ = eb.Close() // Attempt to close event bus on error
+			return nil, nil, nil, nil, "", errors.Wrap(err, "failed to create message router")
+		}
+
+		// Add the stdout printing handler
+		handlerName := "stdout-event-printer-" + runID
+		log.Info().Str("handler", handlerName).Str("topic", topicID).Msg("Registering stdout event handler")
+		router.AddHandler(
+			handlerName,
+			topicID,
+			pubSub, // Subscribe to the same pub/sub
+			topicID,
+			pubSub,             // Publish ACKs/NACKs to the same pub/sub (for potential future use)
+			StdoutEventHandler, // Use the new handler
+		)
+
+		// Configure LLM to use the event bus
+		llmOptions = append(llmOptions, llm.WithEventBus(eb))
 	}
 
 	// Prepare LLM model using Geppetto LLM
@@ -202,10 +260,131 @@ func (a *AgentCommand) prepareLlm(
 		llmOptions...,
 	)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create Geppetto LLM")
+		if eb != nil {
+			_ = eb.Close()
+		}
+		if router != nil {
+			_ = router.Close() // Attempt to close router on error
+		}
+		return nil, nil, nil, nil, "", errors.Wrap(err, "failed to create Geppetto LLM")
 	}
 
-	return llmModel, stepSettings, nil
+	return llmModel, stepSettings, eb, router, topicID, nil
+}
+
+// StdoutEventHandler is a Watermill handler that prints received events to stdout.
+func StdoutEventHandler(msg *message.Message) ([]*message.Message, error) {
+	// Decode the message payload into an Event
+	event := &events.Event{}
+	opts := protojson.UnmarshalOptions{
+		DiscardUnknown: true, // Be lenient with unknown fields
+	}
+	err := opts.Unmarshal(msg.Payload, event)
+	if err != nil {
+		log.Error().Err(err).Str("msg_uuid", msg.UUID).Msg("Failed to unmarshal event from message payload")
+		// Nack the message? Or Ack and log? For stdout printing, Ack is probably fine.
+		return nil, err // Don't requeue
+	}
+
+	// Pretty print the event to stdout
+	outputStr, err := prettyPrintEvent(event)
+	if err != nil {
+		log.Error().Err(err).Str("event_id", event.EventId).Msg("Failed to pretty print event")
+		if _, err := fmt.Fprintf(os.Stdout, "---\\nEvent ID: %s\\nType: %s\\nTimestamp: %s\\nRaw Payload: %s\\nError Pretty Printing: %v\\n---\\n",
+			event.EventId, event.EventType, event.GetTimestamp().AsTime().Format(time.RFC3339Nano), string(msg.Payload), err); err != nil {
+			log.Error().Err(err).Msg("Failed to write error message to stdout")
+		}
+	} else {
+		if _, err := fmt.Fprintln(os.Stdout, outputStr); err != nil {
+			log.Error().Err(err).Msg("Failed to write output to stdout")
+		}
+	}
+
+	// Mark the message as processed successfully
+	msg.Ack()
+	return nil, nil
+}
+
+// prettyPrintEvent formats an event for readable stdout logging.
+func prettyPrintEvent(event *events.Event) (string, error) {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("---\nEvent ID: %s\nRun ID:   %s\nType:     %s\nTime:     %s\nPayload:\n",
+		event.EventId,
+		*event.RunId, // Assume RunId is always set when handled here
+		event.EventType.String(),
+		event.GetTimestamp().AsTime().Format(time.RFC3339Nano),
+	))
+
+	// Use protojson marshaller for readable payload output
+	opts := protojson.MarshalOptions{
+		Multiline:       true,
+		Indent:          "  ",
+		EmitUnpopulated: false, // Don't show empty optional fields
+		UseProtoNames:   true,
+	}
+
+	var payloadProto proto.Message
+	switch p := event.Payload.(type) {
+	case *events.Event_StepStarted:
+		payloadProto = p.StepStarted
+	case *events.Event_StepFinished:
+		payloadProto = p.StepFinished
+	case *events.Event_NodeStatusChanged:
+		payloadProto = p.NodeStatusChanged
+	case *events.Event_LlmCallStarted:
+		payloadProto = p.LlmCallStarted
+	case *events.Event_LlmCallCompleted:
+		payloadProto = p.LlmCallCompleted
+	case *events.Event_ToolInvoked:
+		payloadProto = p.ToolInvoked
+	case *events.Event_ToolReturned:
+		payloadProto = p.ToolReturned
+	case *events.Event_NodeCreated:
+		payloadProto = p.NodeCreated
+	case *events.Event_PlanReceived:
+		payloadProto = p.PlanReceived
+	case *events.Event_NodeAdded:
+		payloadProto = p.NodeAdded
+	case *events.Event_EdgeAdded:
+		payloadProto = p.EdgeAdded
+	case *events.Event_InnerGraphBuilt:
+		payloadProto = p.InnerGraphBuilt
+	case *events.Event_NodeResultAvailable:
+		payloadProto = p.NodeResultAvailable
+	case *events.Event_RunStarted:
+		payloadProto = p.RunStarted
+	case *events.Event_RunFinished:
+		payloadProto = p.RunFinished
+	case *events.Event_RunError:
+		payloadProto = p.RunError
+	case *events.Event_UnknownPayload:
+		payloadProto = p.UnknownPayload
+	default:
+		return "", fmt.Errorf("unknown payload type: %T", event.Payload)
+	}
+
+	if payloadProto != nil {
+		payloadBytes, err := opts.Marshal(payloadProto)
+		if err != nil {
+			sb.WriteString(fmt.Sprintf("  Error marshalling payload: %v\n", err))
+		} else {
+			// Indent the payload JSON
+			scanner := bufio.NewScanner(bytes.NewReader(payloadBytes))
+			for scanner.Scan() {
+				sb.WriteString("  ") // Add indentation
+				sb.WriteString(scanner.Text())
+				sb.WriteString("\n")
+			}
+			if err := scanner.Err(); err != nil {
+				sb.WriteString(fmt.Sprintf("  Error reading marshalled payload: %v\n", err))
+			}
+		}
+	} else {
+		sb.WriteString("  <nil payload>\n")
+	}
+
+	sb.WriteString("---")
+	return sb.String(), nil
 }
 
 // RunIntoGlazeProcessor implements the GlazeCommand interface for GlazedAgentCommand
@@ -214,8 +393,9 @@ func (gac *GlazedAgentCommand) RunIntoGlazeProcessor(
 	parsedLayers *layers.ParsedLayers,
 	gp middlewares.Processor,
 ) error {
-	// 1. Prepare LLM (publisher is nil for Glazed)
-	llmModel, _, err := gac.AgentCommand.prepareLlm(ctx, parsedLayers, nil, "")
+	runID := uuid.New().String()
+	// 1. Prepare LLM (no event bus/router for Glazed mode)
+	llmModel, _, _, _, _, err := gac.AgentCommand.prepareLlmAndEventBus(ctx, parsedLayers, RunModeGlazed, runID)
 	if err != nil {
 		return errors.Wrap(err, "failed to prepare LLM")
 	}
@@ -245,86 +425,70 @@ func (gac *GlazedAgentCommand) RunIntoGlazeProcessor(
 	}
 
 	// 6. Run the agent's specific Glazed processor method
-	log.Info().Str("agentType", gac.AgentCommand.AgentType).Msg("Running GlazedAgent logic")
+	log.Info().Str("agentType", gac.AgentCommand.AgentType).Str("runID", runID).Msg("Running GlazedAgent logic")
 	err = glazedAgent.RunIntoGlazeProcessor(ctx, initialPrompt, gp)
 	if err != nil {
-		log.Error().Err(err).Str("agentType", gac.AgentCommand.AgentType).Msg("GlazedAgent RunIntoGlazeProcessor failed")
+		log.Error().Err(err).Str("agentType", gac.AgentCommand.AgentType).Str("runID", runID).Msg("GlazedAgent RunIntoGlazeProcessor failed")
 	}
 
-	return nil
+	return err // Return the error from the agent run
 }
 
 // RunIntoWriter implements the WriterCommand interface for WriterAgentCommand
 func (wac *WriterAgentCommand) RunIntoWriter(
 	ctx context.Context,
 	parsedLayers *layers.ParsedLayers,
-	w io.Writer,
+	w io.Writer, // Target writer for the final agent output
 ) error {
-	// 1. Setup context and errgroup for managing goroutines
+	// 1. Setup context, errgroup, and run ID
+	runID := uuid.New().String()
 	ctx, cancel := context.WithCancel(ctx)
-	eg, ctx := errgroup.WithContext(ctx) // Use derived context for cancellation
+	eg, ctx := errgroup.WithContext(ctx)
 	defer cancel()
 
-	// 2. Create and start an event router
-	router, err := events.NewEventRouter()
+	// 2. Prepare LLM, EventBus, and Router for Writer Mode
+	llmModel, _, eb, router, _, err := wac.AgentCommand.prepareLlmAndEventBus(ctx, parsedLayers, RunModeWriter, runID)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create event router")
-		return errors.Wrap(err, "failed to create event router")
+		return errors.Wrap(err, "failed to prepare LLM and event bus")
 	}
+	// Ensure event bus and router are closed eventually
+	defer func() {
+		if eb != nil {
+			_ = eb.Close()
+		}
+		if router != nil {
+			_ = router.Close()
+		}
+	}()
 
-	// 3. Generate a unique topic ID
-	topicID := fmt.Sprintf("%s-llm-%s", wac.AgentCommand.Name, uuid.New().String())
-
-	// 4. Register the StepPrinterFunc handler
-	handlerName := "stdout-printer-" + topicID
-	log.Info().Str("handler", handlerName).Str("topic", topicID).Msg("Registering stdout handler for WriterAgent")
-	router.AddHandler(
-		handlerName,
-		topicID,
-		events.StepPrinterFunc("LLM", os.Stdout), // Events still go to stdout here
-	)
-
-	// 5. Prepare LLM, passing the publisher and topic
-	llmModel, _, err := wac.AgentCommand.prepareLlm(ctx, parsedLayers, router.Publisher, topicID)
-	if err != nil {
-		_ = router.Close() // Attempt to close router on error
-		return errors.Wrap(err, "failed to prepare LLM")
-	}
-
-	// 6. Get Agent Factory
+	// 3. Get Agent Factory
 	factory, err := agent.GetAgentFactory(wac.AgentCommand.AgentType)
 	if err != nil {
-		_ = router.Close()
 		return errors.Wrapf(err, "failed to get agent factory for type '%s'", wac.AgentCommand.AgentType)
 	}
 
-	// 7. Create Agent Instance using Factory - pass the AgentCommand directly
+	// 4. Create Agent Instance using Factory
 	agentInstance, err := factory.NewAgent(ctx, wac.AgentCommand, parsedLayers, llmModel)
 	if err != nil {
-		_ = router.Close()
 		return errors.Wrap(err, "failed to create agent instance")
 	}
 
-	// 8. Render the initial prompt using parameters
+	// 5. Render the initial prompt
 	initialPrompt, err := wac.AgentCommand.renderInitialPrompt(parsedLayers)
 	if err != nil {
-		_ = router.Close()
 		return errors.Wrap(err, "failed to render initial prompt")
 	}
 
 	// Start the router in a background goroutine
 	eg.Go(func() error {
-		// No need for defer cancel() here as eg manages context cancellation
-		log.Info().Msg("Starting event router for WriterAgent")
+		log.Info().Str("runID", runID).Msg("Starting event router for WriterAgent")
 		defer func() {
-			log.Info().Msg("Closing event router for WriterAgent")
-			_ = router.Close()
-			log.Info().Msg("Event router closed for WriterAgent")
+			log.Info().Str("runID", runID).Msg("Event router closing")
 		}()
-		runErr := router.Run(ctx)
-		log.Info().Err(runErr).Msg("Event router stopped for WriterAgent")
-		if runErr != nil && !errors.Is(runErr, context.Canceled) {
-			return runErr
+		runErr := router.Run(ctx) // Use the cancellable context
+		log.Info().Err(runErr).Str("runID", runID).Msg("Event router stopped")
+		if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, context.DeadlineExceeded) {
+			return runErr // Return actual router errors
 		}
 		return nil
 	})
@@ -335,47 +499,66 @@ func (wac *WriterAgentCommand) RunIntoWriter(
 		// Wait for the router to be running
 		select {
 		case <-router.Running():
-			log.Info().Str("agentType", wac.AgentCommand.AgentType).Msg("Event router is running, proceeding with agent run")
+			log.Info().Str("agentType", wac.AgentCommand.AgentType).Str("runID", runID).Msg("Event router is running, proceeding with agent run")
 		case <-ctx.Done():
-			log.Warn().Str("agentType", wac.AgentCommand.AgentType).Msg("Context cancelled before router started")
+			log.Warn().Str("agentType", wac.AgentCommand.AgentType).Str("runID", runID).Msg("Context cancelled before router started")
 			return ctx.Err()
+		case <-time.After(5 * time.Second): // Timeout for router startup
+			log.Error().Str("runID", runID).Msg("Timeout waiting for event router to start")
+			return errors.New("timeout waiting for event router to start")
 		}
 
 		// Run the agent's standard Run method
-		log.Info().Str("agentType", wac.AgentCommand.AgentType).Msg("Running WriterAgent logic")
+		log.Info().Str("agentType", wac.AgentCommand.AgentType).Str("runID", runID).Msg("Running WriterAgent logic")
 		resultStr, agentErr := agentInstance.Run(ctx, initialPrompt)
 		if agentErr != nil {
-			log.Error().Err(agentErr).Str("agentType", wac.AgentCommand.AgentType).Msg("WriterAgent Run failed")
+			log.Error().Err(agentErr).Str("agentType", wac.AgentCommand.AgentType).Str("runID", runID).Msg("WriterAgent Run failed")
+			// Emit a run error event if possible
+			if eb != nil {
+				errPayload := &events.RunErrorPayload{
+					ErrorType:    fmt.Sprintf("%T", errors.Cause(agentErr)),
+					ErrorMessage: agentErr.Error(),
+					// Stack trace might be too verbose for event?
+				}
+				_ = eb.EmitRunError(context.Background(), errPayload, &runID) // Use background context for last attempt
+			}
 			return errors.Wrap(agentErr, "failed to run agent")
 		} else {
-			log.Info().Str("agentType", wac.AgentCommand.AgentType).Msg("WriterAgent logic finished")
+			log.Info().Str("agentType", wac.AgentCommand.AgentType).Str("runID", runID).Msg("WriterAgent logic finished")
 		}
 
 		// Write the final result string to the provided writer
 		_, writeErr := fmt.Fprintln(w, resultStr)
 		if writeErr != nil {
-			log.Error().Err(writeErr).Str("agentType", wac.AgentCommand.AgentType).Msg("Failed to write agent result")
+			log.Error().Err(writeErr).Str("agentType", wac.AgentCommand.AgentType).Str("runID", runID).Msg("Failed to write agent result")
 			return errors.Wrap(writeErr, "failed to write agent result")
+		}
+
+		// Emit run finished event if possible
+		if eb != nil {
+			// TODO(manuel): Gather actual stats for RunFinishedPayload
+			finPayload := &events.RunFinishedPayload{
+				// Populate with actual stats later
+			}
+			_ = eb.EmitRunFinished(context.Background(), finPayload, &runID)
 		}
 
 		return nil
 	})
 
 	// Wait for all goroutines (router and agent runner)
-	log.Info().Msg("Waiting for agent and router shutdown (WriterAgent)")
+	log.Info().Str("runID", runID).Msg("Waiting for agent and router shutdown (WriterAgent)")
 	waitErr := eg.Wait()
 	if waitErr != nil {
-		// Don't wrap context.Canceled errors
-		if errors.Is(waitErr, context.Canceled) {
-			log.Info().Msg("Agent/Router execution cancelled (WriterAgent)")
-			return nil // Or return context.Canceled if preferred upstream
+		if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
+			log.Info().Str("runID", runID).Msg("Agent/Router execution cancelled or timed out (WriterAgent)")
+			return nil
 		}
-		log.Error().Err(waitErr).Msg("Agent execution or router shutdown failed (WriterAgent)")
+		log.Error().Err(waitErr).Str("runID", runID).Msg("Agent execution or router shutdown failed (WriterAgent)")
 		return errors.Wrap(waitErr, "agent execution or router shutdown failed")
-	} else {
-		log.Info().Msg("Agent and router shut down successfully (WriterAgent)")
 	}
 
+	log.Info().Str("runID", runID).Msg("Agent and router shut down successfully (WriterAgent)")
 	return nil
 }
 

@@ -1,6 +1,26 @@
 // Package types defines common types used across the framework
 package types
 
+import (
+	"github.com/go-go-golems/glazed/pkg/cmds"
+	"gopkg.in/yaml.v3"
+)
+
+// RawNode wraps a yaml.Node to preserve its raw form for later processing
+type RawNode struct {
+	node *yaml.Node
+}
+
+func (n *RawNode) UnmarshalYAML(value *yaml.Node) error {
+	n.node = value
+	return nil
+}
+
+// GetNode returns the internal yaml.Node for processing
+func (n *RawNode) GetNode() *yaml.Node {
+	return n.node
+}
+
 // AgentResponse represents a response from an agent
 type AgentResponse struct {
 	// Type is the type of response (e.g., "thinking", "tool_result", "final")
@@ -95,4 +115,17 @@ type Trace struct {
 
 	// Spans is a list of spans in the trace
 	Spans []Span `json:"spans"`
+}
+
+// AgentCommandDescription is a command that encapsulates agent execution configuration.
+// It serves as the base for WriterAgentCommand and GlazedAgentCommand.
+type AgentCommandDescription struct {
+	*cmds.CommandDescription
+
+	// Agent-specific fields
+	AgentType    string
+	SystemPrompt string
+	Prompt       string // Template string for the initial prompt
+	Tools        []string
+	AgentOptions *RawNode `yaml:"agent_options,omitempty"`
 }

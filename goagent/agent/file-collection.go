@@ -34,12 +34,42 @@ type FileCollectionAgentSettings struct {
 }
 
 // NewAgent creates a new FileCollectionAgent.
-func (f *FileCollectionAgentFactory) NewAgent(ctx context.Context, parsedLayers *layers.ParsedLayers, llmModel llm.LLM) (Agent, error) {
+func (f *FileCollectionAgentFactory) NewAgent(
+	ctx context.Context,
+	cmd Command,
+	parsedLayers *layers.ParsedLayers,
+	llmModel llm.LLM,
+) (Agent, error) {
 	var settings FileCollectionAgentSettings
 	err := parsedLayers.InitializeStruct(FileCollectionAgentType, &settings)
 	if err != nil {
 		return nil, err
 	}
+
+	agentOptions, err := cmd.RenderAgentOptions(parsedLayers.GetDataMap(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply agent options from command if provided
+	if cmdMaxIter, ok := agentOptions["max-iterations"]; ok {
+		if maxIter, ok := cmdMaxIter.(int); ok {
+			settings.MaxIterations = maxIter
+		}
+	}
+
+	if saveToDisk, ok := agentOptions["save-to-disk"]; ok {
+		if saveOpt, ok := saveToDisk.(bool); ok {
+			settings.SaveToDisk = saveOpt
+		}
+	}
+
+	if destDir, ok := agentOptions["destination-directory"]; ok {
+		if dir, ok := destDir.(string); ok {
+			settings.DestinationDirectory = dir
+		}
+	}
+
 	return NewFileCollectionAgent(llmModel, &settings), nil
 }
 

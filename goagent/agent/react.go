@@ -22,12 +22,30 @@ var _ AgentFactory = &ReactAgentFactory{}
 
 const ReactAgentType = "react"
 
-func (f *ReactAgentFactory) NewAgent(ctx context.Context, parsedLayers *layers.ParsedLayers, llmModel llm.LLM) (Agent, error) {
+func (f *ReactAgentFactory) NewAgent(
+	ctx context.Context,
+	cmd Command,
+	parsedLayers *layers.ParsedLayers,
+	llmModel llm.LLM,
+) (Agent, error) {
 	var settings ReactAgentSettings
 	err := parsedLayers.InitializeStruct(ReactAgentType, &settings)
 	if err != nil {
 		return nil, err
 	}
+
+	agentOptions, err := cmd.RenderAgentOptions(parsedLayers.GetDataMap(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Example of using agent options from command
+	if cmdMaxIter, ok := agentOptions["max-iterations"]; ok {
+		if maxIter, ok := cmdMaxIter.(int); ok {
+			settings.MaxIterations = maxIter
+		}
+	}
+
 	return &ReActAgent{
 		BaseAgent: NewBaseAgent(llmModel, settings.MaxIterations),
 	}, nil

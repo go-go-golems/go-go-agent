@@ -1,0 +1,71 @@
+name: structured-data-processor
+short: "Extracts structured data from text using XML tags"
+long: |
+  An agent that analyzes input text and extracts structured data in XML format.
+  This agent is ideal for processing various types of text data where you need
+  consistently structured output following a specific schema.
+
+type: agent
+command-type: glazed # Use glazed for structured output
+agent-type: structured-data # Use the new agent type
+
+system-prompt: |
+  You are an AI assistant tasked with extracting structured data from text in a consistent XML format.
+
+prompt: |
+  You are an AI assistant tasked with extracting structured data from the provided input. 
+  Your goal is to analyze the content and provide the results in a well-structured XML format.
+
+  Please follow the structure exactly as specified below. Make sure your output conforms 
+  to the XML schema requirements.
+
+  Here is the input to analyze:
+
+  {{ if .input }}
+  <input>
+  {{ .input }}
+  </input>
+  {{ end }}
+
+  {{ if .context }}
+  Additional Context:
+  {{ range .context }}
+  --- File: {{ .Path }} ---
+  {{ .Content }}
+  ---
+  {{- end }}
+  {{ end }}
+
+  {{ if .description }}
+  Task description:
+  <task_description>
+  {{ .description | join " " }}
+  </task_description>
+  {{ end }}
+
+  {{ if .tags }}
+  Output your analysis inside the following XML tags: {{ .tags }}
+  {{ else }}
+  Output your analysis inside <results> XML tags.
+  {{ end }}
+
+flags:
+  - name: context
+    type: fileList
+    help: Additional context from files
+  - name: input
+    type: string
+    help: "The text content to analyze"
+    required: true
+  - name: description
+    type: stringList
+    help: "Specific instructions for the analysis task"
+    required: false
+  - name: tags
+    type: string
+    help: "Comma-separated list of XML tags to use for output (default: 'results')"
+    required: false
+  - name: output-as-xml
+    type: bool
+    help: "Output the extracted data in XML format"
+    default: true 

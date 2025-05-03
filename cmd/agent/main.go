@@ -43,7 +43,7 @@ It supports various agent types like ReAct, Plan-and-Execute, and File Collectio
 	helpSystem.SetupCobraRootCommand(rootCmd)
 
 	// --- Load commands from repository ---
-	repoPath := "/home/manuel/code/wesen/corporate-headquarters/vibes/2025-04-21/llm-agent-complete/llm-agent-framework/goagent/examples/commands"
+	repoPath := "/home/manuel/code/wesen/corporate-headquarters/go-go-agent/goagent/examples/commands"
 	// check if repoPath exists and is a directory
 	if fi, err := os.Stat(repoPath); err == nil && fi.IsDir() {
 		loader := &goagentcmds.AgentCommandLoader{}

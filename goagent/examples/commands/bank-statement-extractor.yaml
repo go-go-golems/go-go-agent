@@ -4,7 +4,7 @@ long: |
   An agent that takes bank statement CSV data and a task description, then generates a JSON summary and categorized withdrawals/deposits CSV files for each account found.
 
 type: agent
-command-type: glazed # Use glazed for structured file output (important for file collection)
+command-type: writer
 agent-type: file-collection # Suitable for generating multiple files
 
 system-prompt: |

@@ -30,22 +30,25 @@ prompt: |
   
   Withdrawals CSV File Example (with Category and optional Comment):
   <file name="withdrawals_ACCOUNT_NAME.csv">
-  Date,Description,Amount,Category,Comment
-  2023-10-30,CHECKCARD BANDCAMP BLACK ACRE REC,-$8.53,Entertainment Music,
-  2023-10-30,PURCHASE PAYPAL *UBER 402-935-7733 CA,-$4.76,Transportation RideShare,Uber ride
-  2023-10-30,PURCHASE WORKBAR.COM WORKBAR.COM MA,-$139.00,Business Workspace,Monthly membership
+  "Date","Description","Amount","Category","Comment"
+  "2023-10-30","CHECKCARD BANDCAMP BLACK ACRE REC","-$8.53","Entertainment Music",""
+  "2023-10-30","PURCHASE PAYPAL *UBER 402-935-7733 CA","-$4.76","Transportation RideShare","Uber ride"
+  "2023-10-30","PURCHASE WORKBAR.COM WORKBAR.COM MA","-$139.00","Business Workspace","Monthly membership"
   ...
   </file>
   
   Deposits CSV File Example (with Category and optional Comment):
   <file name="deposits_ACCOUNT_NAME.csv">
-  Date,Description,Amount,Category,Comment
-  2023-11-15,Direct Deposit COMPANY_NAME,$5000.00,Income Payroll,Bi-weekly salary
-  2023-11-20,Transfer from Savings XXXX1234,$200.00,Transfer,
+  "Date","Description","Amount","Category","Comment"
+  "2023-11-15","Direct Deposit COMPANY_NAME","$5000.00","Income Payroll","Bi-weekly salary"
+  "2023-11-20","Transfer from Savings XXXX1234","$200.00","Transfer",""
   ...
   </file>
   
   Include <!-- all files emitted --> on a new line AFTER the last </file> tag.
+
+  **Important:** If the content of a single file (especially a CSV) is too large to fit in one response, continue the file content directly in the subsequent response without repeating the `<file name="...">` tag or the header row. Resume output exactly where the previous response left off, even if it's mid-line.
+
   If you cannot extract certain information or create a particular file due to missing data, explain the issue within <error> tags.
   Remember to maintain the privacy and security of the financial data.
 
@@ -95,10 +98,10 @@ prompt: |
   2. Identify the unique bank accounts present in the statement (assume account name can be inferred if not explicitly stated, or use a default like "Primary").
   3. For each identified bank account:
      a. Create a JSON file named `summary_ACCOUNT_NAME.json` containing the account summary (beginning balance, total deposits, total withdrawals, checks, service fees, ending balance).
-     b. Create a CSV file named `withdrawals_ACCOUNT_NAME.csv` (Header: Date,Description,Amount,Category,Comment) listing withdrawals. Populate `Category` (space-separated) and optional `Comment`.
-     c. Create a CSV file named `deposits_ACCOUNT_NAME.csv` (Header: Date,Description,Amount,Category,Comment) listing deposits. Populate `Category` and optional `Comment`.
-  4. Ensure the JSON file is valid and CSVs have correct headers.
-  5. Format currency values consistently (e.g., $1234.56 or -$123.45).
+     b. Create a CSV file named `withdrawals_ACCOUNT_NAME.csv` (Header: "Date","Description","Amount","Category","Comment") listing withdrawals. Populate `Category` (space-separated) and optional `Comment`. **Ensure all fields are enclosed in double quotes (" "). If a field value contains a double quote, escape it by replacing it with two double quotes ("").**
+     c. Create a CSV file named `deposits_ACCOUNT_NAME.csv` (Header: "Date","Description","Amount","Category","Comment") listing deposits. Populate `Category` and optional `Comment`. **Ensure all fields are enclosed in double quotes (" "). If a field value contains a double quote, escape it by replacing it with two double quotes ("").**
+  4. Ensure the JSON file is valid and CSVs have correct headers and quoted fields.
+  5. Format currency values consistently (e.g., "$1234.56" or "-$123.45").
   6. Sort transactions by date chronologically in CSVs.
   7. Output the generated JSON and CSV files using `<file>` tags as shown in the system prompt.
 

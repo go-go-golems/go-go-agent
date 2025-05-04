@@ -1,6 +1,6 @@
-.PHONY: gifs
+.PHONY: gifs generate-proto install-proto-tools clean
 
-all: gifs
+all: gifs generate-proto
 
 VERSION=v0.1.14
 
@@ -50,3 +50,18 @@ AGENT_BINARY=$(shell which agent)
 install:
 	go build -o ./dist/agent ./cmd/agent && \
 		cp ./dist/agent $(AGENT_BINARY)
+
+# Install required protobuf tools
+install-proto-tools:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Generate Go code from proto files
+generate-proto:
+	mkdir -p pkg/events
+	protoc --go_out=. --go_opt=paths=source_relative \
+		proto/events.proto
+
+# Clean generated files
+clean:
+	rm -rf pkg/events/*.pb.go

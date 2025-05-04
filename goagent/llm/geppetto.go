@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/go-go-golems/geppetto/pkg/conversation"
 	"github.com/go-go-golems/geppetto/pkg/embeddings"
 	"github.com/go-go-golems/geppetto/pkg/steps/ai"
 	"github.com/go-go-golems/geppetto/pkg/steps/ai/chat"
 	"github.com/go-go-golems/geppetto/pkg/steps/ai/settings"
+	"github.com/go-go-golems/go-go-agent/pkg/eventbus"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -23,6 +23,9 @@ type GeppettoLLM struct {
 	publisher message.Publisher
 	// topicID is the topic to publish events to if configured
 	topicID string
+	// Optional event bus for structured events
+	eventBus *eventbus.EventBus
+	runID    *string // To associate events with a specific run
 }
 
 // GeppettoLLMOption defines a function type for configuring GeppettoLLM.
@@ -43,41 +46,6 @@ func WithPublisherAndTopic(publisher message.Publisher, topicID string) Geppetto
 	}
 }
 
-// NewGeppettoLLM creates a new GeppettoLLM with the provided settings and options.
-// It derives the embedding provider from the stepSettings.
-func NewGeppettoLLM(
-	stepSettings *settings.StepSettings,
-	opts ...GeppettoLLMOption,
-) (*GeppettoLLM, error) {
-	if stepSettings == nil {
-		return nil, errors.New("stepSettings cannot be nil")
-	}
-
-	stepSettings = stepSettings.Clone()
-	stepSettings.Chat.Stream = true
-
-	embeddingFactory := embeddings.NewSettingsFactoryFromStepSettings(stepSettings)
-	embeddingProvider, err := embeddingFactory.NewProvider()
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create embedding provider from step settings (type: %s, engine: %s)",
-			stepSettings.Embeddings.Type, stepSettings.Embeddings.Engine)
-	}
-
-	llm := &GeppettoLLM{
-		stepSettings:      stepSettings,
-		embeddingProvider: embeddingProvider,
-	}
-
-	// Apply options
-	for _, opt := range opts {
-		if err := opt(llm); err != nil {
-			return nil, errors.Wrap(err, "failed to apply GeppettoLLM option")
-		}
-	}
-
-	return llm, nil
-}
-
 // createChatStep creates a new chat step, potentially configured to publish events.
 func createChatStep(
 	stepSettings *settings.StepSettings,
@@ -87,7 +55,19 @@ func createChatStep(
 	factory := &ai.StandardStepFactory{
 		Settings: stepSettings,
 	}
-	step, err := factory.NewStep()
+
+	// Configure the underlying chat step
+	var stepOptions []chat.StepOption
+
+	// If a publisher is provided (for older streaming), add it to the step options
+	if publisher != nil && topicID != "" {
+		log.Info().Str("topic", topicID).Msg("Configuring GeppettoLLM with Watermill publisher for streaming")
+		stepOptions = append(stepOptions,
+			chat.WithPublishedTopic(publisher, topicID),
+		)
+	}
+
+	step, err := factory.NewStep(stepOptions...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create chat step in factory")
 	}
@@ -105,39 +85,6 @@ func createChatStep(
 
 	// Type assertion to the specific expected step type
 	return step, nil
-}
-
-// Generate implements the LLM interface's Generate method.
-// If a publisher and topicID are configured, it uses the createChatStep helper
-// to ensure the underlying step publishes events.
-func (g *GeppettoLLM) Generate(
-	ctx context.Context,
-	messages []*conversation.Message,
-) (*conversation.Message, error) {
-	// Use the helper function to create the step, passing publisher/topic
-	chatStep, err := createChatStep(g.stepSettings, g.publisher, g.topicID)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create chat step")
-	}
-
-	conv := conversation.Conversation(messages)
-	result, err := chatStep.Start(ctx, conv)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to start chat step")
-	}
-
-	results := result.Return()
-	if len(results) == 0 {
-		return nil, errors.New("no response generated")
-	}
-
-	lastResult := results[len(results)-1]
-	message, err := lastResult.Value()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get message value")
-	}
-
-	return message, nil
 }
 
 // GenerateEmbedding implements the LLM interface's GenerateEmbedding method

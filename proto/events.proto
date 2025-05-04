@@ -1,0 +1,280 @@
+syntax = "proto3";
+package events;
+
+option go_package = "github.com/go-go-golems/go-go-agent/pkg/events";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// LlmMessage - Message in a prompt
+message LlmMessage {
+  string role = 1;
+  string content = 2;
+}
+
+// StepStartedPayload - When a step starts
+message StepStartedPayload {
+  int32 step = 1;
+  string node_id = 2;
+  string node_goal = 3;
+  string root_id = 4;
+}
+
+// StepFinishedPayload - When a step finishes
+message StepFinishedPayload {
+  int32 step = 1;
+  string node_id = 2;
+  string action_name = 3;
+  string status_after = 4;
+  double duration_seconds = 5;
+}
+
+// NodeStatusChangePayload - Node status changes
+message NodeStatusChangePayload {
+  string node_id = 1;
+  string node_goal = 2;
+  string old_status = 3;
+  string new_status = 4;
+  optional int32 step = 5;
+}
+
+// TokenUsage - Token usage info
+message TokenUsage {
+  int32 prompt_tokens = 1;
+  int32 completion_tokens = 2;
+  optional string error = 3;
+  optional string node_id = 4;
+}
+
+// LlmCallStartedPayload - LLM call starts
+message LlmCallStartedPayload {
+  string agent_class = 1;
+  string model = 2;
+  repeated LlmMessage prompt = 3;
+  string prompt_preview = 4;
+  optional int32 step = 5;
+  optional string node_id = 6;
+  optional string action_name = 7;
+  string call_id = 8;
+}
+
+// LlmCallCompletedPayload - LLM call completes
+message LlmCallCompletedPayload {
+  string agent_class = 1;
+  string model = 2;
+  double duration_seconds = 3;
+  string response = 4;
+  string result_summary = 5;
+  optional string error = 6;
+  optional int32 step = 7;
+  optional string node_id = 8;
+  optional TokenUsage token_usage = 9;
+  optional string action_name = 10;
+  string call_id = 11;
+}
+
+// ToolInvokedPayload - Tool is invoked
+message ToolInvokedPayload {
+  string tool_name = 1;
+  string api_name = 2;
+  string args_summary = 3;
+  optional string node_id = 4;
+  optional int32 step = 5;
+  optional string agent_class = 6;
+  string tool_call_id = 7;
+}
+
+// ToolReturnedPayload - Tool returns
+message ToolReturnedPayload {
+  string tool_name = 1;
+  string api_name = 2;
+  string state = 3;
+  double duration_seconds = 4;
+  string result_summary = 5;
+  optional string error = 6;
+  optional string node_id = 7;
+  optional int32 step = 8;
+  optional string agent_class = 9;
+  string tool_call_id = 10;
+}
+
+// NodeCreatedPayload - Node is created
+message NodeCreatedPayload {
+  string node_id = 1;
+  string node_nid = 2;
+  string node_type = 3;
+  string task_type = 4;
+  string task_goal = 5;
+  int32 layer = 6;
+  optional string outer_node_id = 7;
+  string root_node_id = 8;
+  repeated string initial_parent_nids = 9;
+  optional int32 step = 10;
+}
+
+// PlanReceivedPayload - Plan is received
+message PlanReceivedPayload {
+  string node_id = 1;
+  google.protobuf.Struct raw_plan = 2; // Using Struct for arbitrary JSON
+  optional int32 step = 3;
+  optional string task_type = 4;
+  optional string task_goal = 5;
+}
+
+// NodeAddedPayload - Node added to graph
+message NodeAddedPayload {
+  string graph_owner_node_id = 1;
+  string added_node_id = 2;
+  string added_node_nid = 3;
+  optional int32 step = 4;
+  optional string task_type = 5;
+  optional string task_goal = 6;
+}
+
+// EdgeAddedPayload - Edge added to graph
+message EdgeAddedPayload {
+  string graph_owner_node_id = 1;
+  string parent_node_id = 2;
+  string child_node_id = 3;
+  string parent_node_nid = 4;
+  string child_node_nid = 5;
+  optional int32 step = 6;
+  optional string task_type = 7;
+  optional string task_goal = 8;
+}
+
+// InnerGraphBuiltPayload - Inner graph is built
+message InnerGraphBuiltPayload {
+  string node_id = 1;
+  int32 node_count = 2;
+  int32 edge_count = 3;
+  repeated string node_ids = 4;
+  optional int32 step = 5;
+  optional string task_type = 6;
+  optional string task_goal = 7;
+}
+
+// NodeResultAvailablePayload - Node result becomes available
+message NodeResultAvailablePayload {
+  string node_id = 1;
+  string action_name = 2;
+  string result_summary = 3;
+  optional int32 step = 4;
+  optional string task_type = 5;
+  optional string task_goal = 6;
+}
+
+// RunStartedPayload - Run starts
+message RunStartedPayload {
+  google.protobuf.Struct input_data = 1;
+  google.protobuf.Struct config = 2;
+  string run_mode = 3;
+  google.protobuf.Timestamp timestamp_utc = 4;
+}
+
+// RunFinishedPayload - Run finishes
+message RunFinishedPayload {
+  int32 total_steps = 1;
+  double duration_seconds = 2;
+  int32 total_nodes = 3;
+  int32 total_llm_calls = 4;
+  int32 total_tool_calls = 5;
+  message TokenUsageSummary {
+    int32 total_prompt_tokens = 1;
+    int32 total_completion_tokens = 2;
+  }
+  TokenUsageSummary token_usage_summary = 6;
+  message NodeStatistics {
+    int32 total_created = 1;
+    int32 total_completed = 2;
+    map<string, int32> by_type = 3;
+  }
+  NodeStatistics node_statistics = 7;
+  message SearchStatistics {
+    int32 total_searches = 1;
+    int32 total_pages_processed = 2;
+    int32 total_search_tokens = 3;
+  }
+  optional SearchStatistics search_statistics = 8;
+}
+
+// RunErrorPayload - Run error
+message RunErrorPayload {
+  string error_type = 1;
+  string error_message = 2;
+  string stack_trace = 3;
+  optional string node_id = 4;
+  optional int32 step = 5;
+  message Context {
+    int32 last_successful_step = 1;
+    int32 total_processed_items = 2;
+    string last_item_id = 3;
+    optional string engine_backend = 4;
+  }
+  Context context = 6;
+}
+
+// EventType - Type of event
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_STEP_STARTED = 1;
+  EVENT_TYPE_STEP_FINISHED = 2;
+  EVENT_TYPE_NODE_STATUS_CHANGED = 3;
+  EVENT_TYPE_LLM_CALL_STARTED = 4;
+  EVENT_TYPE_LLM_CALL_COMPLETED = 5;
+  EVENT_TYPE_TOOL_INVOKED = 6;
+  EVENT_TYPE_TOOL_RETURNED = 7;
+  EVENT_TYPE_NODE_CREATED = 8;
+  EVENT_TYPE_PLAN_RECEIVED = 9;
+  EVENT_TYPE_NODE_ADDED = 10;
+  EVENT_TYPE_EDGE_ADDED = 11;
+  EVENT_TYPE_INNER_GRAPH_BUILT = 12;
+  EVENT_TYPE_NODE_RESULT_AVAILABLE = 13;
+  EVENT_TYPE_RUN_STARTED = 14;
+  EVENT_TYPE_RUN_FINISHED = 15;
+  EVENT_TYPE_RUN_ERROR = 16;
+}
+
+// ConnectionStatus - WebSocket connection status
+enum ConnectionStatus {
+  CONNECTION_STATUS_UNSPECIFIED = 0;
+  CONNECTION_STATUS_CONNECTING = 1;
+  CONNECTION_STATUS_CONNECTED = 2;
+  CONNECTION_STATUS_DISCONNECTED = 3;
+}
+
+// Event - The main event message that wraps all event types
+message Event {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  EventType event_type = 3;
+  optional string run_id = 4;
+  
+  // One of the following will be set based on event_type
+  oneof payload {
+    StepStartedPayload step_started = 5;
+    StepFinishedPayload step_finished = 6;
+    NodeStatusChangePayload node_status_changed = 7;
+    LlmCallStartedPayload llm_call_started = 8;
+    LlmCallCompletedPayload llm_call_completed = 9;
+    ToolInvokedPayload tool_invoked = 10;
+    ToolReturnedPayload tool_returned = 11;
+    NodeCreatedPayload node_created = 12;
+    PlanReceivedPayload plan_received = 13;
+    NodeAddedPayload node_added = 14;
+    EdgeAddedPayload edge_added = 15;
+    InnerGraphBuiltPayload inner_graph_built = 16;
+    NodeResultAvailablePayload node_result_available = 17;
+    RunStartedPayload run_started = 18;
+    RunFinishedPayload run_finished = 19;
+    RunErrorPayload run_error = 20;
+    // For unknown event types
+    google.protobuf.Struct unknown_payload = 100;
+  }
+}
+
+// EventsResponse - Response from the events API
+message EventsResponse {
+  ConnectionStatus status = 1;
+  repeated Event events = 2;
+} 

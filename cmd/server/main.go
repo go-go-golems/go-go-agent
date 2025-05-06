@@ -14,7 +14,6 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
 	"github.com/go-go-golems/glazed/pkg/help"
-	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -34,7 +33,7 @@ type ServerCommand struct {
 }
 
 // Ensure ServerCommand implements the Command interface
-var _ cmds.Command = (*ServerCommand)(nil)
+var _ cmds.BareCommand = (*ServerCommand)(nil)
 
 // ServerSettings holds the server-specific settings
 type ServerSettings struct {
@@ -49,7 +48,6 @@ type ServerSettings struct {
 func (c *ServerCommand) Run(
 	ctx context.Context,
 	parsedLayers *layers.ParsedLayers,
-	gp middlewares.Processor,
 ) error {
 	// Get settings from all layers
 	serverSettings := &ServerSettings{}

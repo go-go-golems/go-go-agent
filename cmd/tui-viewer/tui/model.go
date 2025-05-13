@@ -98,8 +98,8 @@ var Keys = KeyMap{
 		key.WithHelp("f", "filter events"),
 	),
 	ApplyFilter: key.NewBinding(
-		key.WithKeys("F"),
-		key.WithHelp("F", "apply filter"),
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "apply filter"),
 	),
 }
 
@@ -114,13 +114,13 @@ type ViewModel struct {
 	MaxEvents        int
 	EventChan        chan model.Event
 	Events           []model.Event
-	FilteredEvents   []model.Event    // Events after filtering
+	FilteredEvents   []model.Event // Events after filtering
 	ShouldAutoScroll bool
 	ShowingDetail    bool
-	ShowingFilter    bool             // Whether we're showing the filter UI
+	ShowingFilter    bool // Whether we're showing the filter UI
 	CurrentEvent     *model.Event
 	ViewRegistry     *views.Registry
-	Expanded         map[string]bool  // Track expanded sections
+	Expanded         map[string]bool // Track expanded sections
 	FilterView       filters.FilterView
 }
 
@@ -236,54 +236,86 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, CheckForEvents(m.EventChan))
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, Keys.Quit):
-			log.Info().Msg("Quitting")
-			return m, tea.Quit
-
-		case key.Matches(msg, Keys.ToggleAutoScroll):
-			m.ShouldAutoScroll = !m.ShouldAutoScroll
-			if m.ShouldAutoScroll && !m.ShowingDetail && !m.ShowingFilter {
-				m.List.Select(len(m.Events) - 1)
-			}
-
-		case key.Matches(msg, Keys.Help):
-			m.Help.ShowAll = !m.Help.ShowAll
-
-		case key.Matches(msg, Keys.ToggleFilter):
-			if !m.ShowingDetail {
-				// Toggle filter view
-				m.ShowingFilter = !m.ShowingFilter
-				eventHandled = true
-			}
-
-		case key.Matches(msg, Keys.ApplyFilter):
-			if m.ShowingFilter {
+		// Process keys based on current view mode
+		if m.ShowingFilter {
+			// In filter mode, only handle explicit filter-related keys
+			switch {
+			case key.Matches(msg, Keys.ApplyFilter):
 				// Apply the current filters
-				// Get filter state and apply it
 				m.FilteredEvents = m.FilterView.ApplyFilters(m.Events)
-				
+
 				// Update the list view with filtered events
 				updateListWithEvents(&m, m.FilteredEvents)
-				
+
 				// Exit filter view
 				m.ShowingFilter = false
 				eventHandled = true
-			}
 
-		case key.Matches(msg, Keys.Back):
-			if m.ShowingDetail {
+			case key.Matches(msg, Keys.Back):
+				m.ShowingFilter = false
+				eventHandled = true
+			}
+		} else if m.ShowingDetail {
+			// In detail mode, only handle detail-related keys
+			switch {
+			case key.Matches(msg, Keys.Quit):
+				log.Info().Msg("Quitting")
+				return m, tea.Quit
+
+			case key.Matches(msg, Keys.Help):
+				m.Help.ShowAll = !m.Help.ShowAll
+
+			case key.Matches(msg, Keys.Back):
 				m.ShowingDetail = false
 				m.CurrentEvent = nil
 				m.Expanded = make(map[string]bool) // Reset expanded sections
 				eventHandled = true
-			} else if m.ShowingFilter {
-				m.ShowingFilter = false
+
+			case key.Matches(msg, Keys.ToggleExpand):
+				if m.CurrentEvent != nil {
+					// Toggle expand based on event type and current focus
+					view := m.ViewRegistry.GetView(m.CurrentEvent.EventType)
+					expandable := view.ExpandableFields()
+
+					// If we have expandable fields, toggle them
+					if len(expandable) > 0 {
+						// For simplicity, toggle all fields
+						for _, field := range expandable {
+							m.Expanded[field] = !m.Expanded[field]
+						}
+
+						// Redraw the content
+						detailContent, err := m.ViewRegistry.FormatEvent(*m.CurrentEvent, m.Expanded)
+						if err == nil {
+							m.Viewport.SetContent(detailContent)
+						}
+					}
+				}
 				eventHandled = true
 			}
+		} else {
+			// In list mode, handle all valid list commands
+			switch {
+			case key.Matches(msg, Keys.Quit):
+				log.Info().Msg("Quitting")
+				return m, tea.Quit
 
-		case key.Matches(msg, Keys.Select):
-			if !m.ShowingDetail {
+			case key.Matches(msg, Keys.ToggleAutoScroll):
+				m.ShouldAutoScroll = !m.ShouldAutoScroll
+				if m.ShouldAutoScroll {
+					m.List.Select(len(m.Events) - 1)
+				}
+
+			case key.Matches(msg, Keys.Help):
+				m.Help.ShowAll = !m.Help.ShowAll
+
+			case key.Matches(msg, Keys.ToggleFilter):
+				// Toggle filter view (only available in list view)
+				m.ShowingFilter = true
+				eventHandled = true
+
+			case key.Matches(msg, Keys.Select):
+				// Select an event to view details
 				selected := m.List.SelectedItem()
 				if selected != nil {
 					item := selected.(EventItem)
@@ -299,30 +331,8 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.Viewport.GotoTop()
 				}
+				eventHandled = true
 			}
-			eventHandled = true
-
-		case key.Matches(msg, Keys.ToggleExpand):
-			if m.ShowingDetail && m.CurrentEvent != nil {
-				// Toggle expand based on event type and current focus
-				view := m.ViewRegistry.GetView(m.CurrentEvent.EventType)
-				expandable := view.ExpandableFields()
-
-				// If we have expandable fields, toggle them
-				if len(expandable) > 0 {
-					// For simplicity, toggle all fields
-					for _, field := range expandable {
-						m.Expanded[field] = !m.Expanded[field]
-					}
-
-					// Redraw the content
-					detailContent, err := m.ViewRegistry.FormatEvent(*m.CurrentEvent, m.Expanded)
-					if err == nil {
-						m.Viewport.SetContent(detailContent)
-					}
-				}
-			}
-			eventHandled = true
 		}
 	}
 

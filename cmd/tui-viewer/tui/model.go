@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog/log"
 
+	"github.com/go-go-golems/go-go-agent/cmd/tui-viewer/tui/filters"
 	"github.com/go-go-golems/go-go-agent/cmd/tui-viewer/tui/views"
 	"github.com/go-go-golems/go-go-agent/pkg/model"
 )
@@ -51,16 +52,19 @@ type KeyMap struct {
 	Back             key.Binding
 	Select           key.Binding
 	ToggleExpand     key.Binding
+	ToggleFilter     key.Binding
+	ApplyFilter      key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.ToggleAutoScroll, k.Quit}
+	return []key.Binding{k.Help, k.ToggleAutoScroll, k.ToggleFilter, k.Quit}
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.ToggleAutoScroll, k.Help, k.Quit},
 		{k.Select, k.Back, k.ToggleExpand},
+		{k.ToggleFilter, k.ApplyFilter},
 	}
 }
 
@@ -89,6 +93,14 @@ var Keys = KeyMap{
 		key.WithKeys("e"),
 		key.WithHelp("e", "expand/collapse sections"),
 	),
+	ToggleFilter: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "filter events"),
+	),
+	ApplyFilter: key.NewBinding(
+		key.WithKeys("F"),
+		key.WithHelp("F", "apply filter"),
+	),
 }
 
 // Messages
@@ -102,11 +114,14 @@ type ViewModel struct {
 	MaxEvents        int
 	EventChan        chan model.Event
 	Events           []model.Event
+	FilteredEvents   []model.Event    // Events after filtering
 	ShouldAutoScroll bool
 	ShowingDetail    bool
+	ShowingFilter    bool             // Whether we're showing the filter UI
 	CurrentEvent     *model.Event
 	ViewRegistry     *views.Registry
-	Expanded         map[string]bool // Track expanded sections
+	Expanded         map[string]bool  // Track expanded sections
+	FilterView       filters.FilterView
 }
 
 func NewViewModel(maxEvents int, eventChan chan model.Event) ViewModel {
@@ -134,6 +149,9 @@ func NewViewModel(maxEvents int, eventChan chan model.Event) ViewModel {
 	viewRegistry.RegisterView(model.EventTypeLLMCallStarted, &views.LLMCallStartedView{})
 	viewRegistry.RegisterView(model.EventTypeLLMCallCompleted, &views.LLMCallCompletedView{})
 
+	// Create filter view
+	filterView := filters.NewFilterView()
+
 	return ViewModel{
 		List:             listModel,
 		Viewport:         vp,
@@ -141,11 +159,14 @@ func NewViewModel(maxEvents int, eventChan chan model.Event) ViewModel {
 		MaxEvents:        maxEvents,
 		EventChan:        eventChan,
 		Events:           []model.Event{},
+		FilteredEvents:   []model.Event{},
 		ShouldAutoScroll: true,
 		ShowingDetail:    false,
+		ShowingFilter:    false,
 		CurrentEvent:     nil,
 		ViewRegistry:     viewRegistry,
 		Expanded:         make(map[string]bool),
+		FilterView:       filterView,
 	}
 }
 
@@ -182,6 +203,8 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.List.SetHeight(msg.Height - verticalMargin)
 		m.Viewport.Width = msg.Width - horizontalMargin
 		m.Viewport.Height = msg.Height - verticalMargin
+		m.FilterView.Width = msg.Width - horizontalMargin
+		m.FilterView.Height = msg.Height - verticalMargin
 
 		m.Help.Width = msg.Width
 
@@ -195,23 +218,19 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Events = m.Events[len(m.Events)-m.MaxEvents:]
 		}
 
-		// Update the list with new events
-		listItems := make([]list.Item, len(m.Events))
-		for i, e := range m.Events {
-			listItems[i] = EventItem{
-				ID:        e.EventID,
-				Timestamp: e.Timestamp,
-				EventType: e.EventType,
-				RunID:     e.RunID,
-				Event:     e,
-				registry:  m.ViewRegistry,
-			}
+		// Check if we need to apply filters
+		if len(m.FilteredEvents) > 0 {
+			// Re-apply filters to get updated filtered list
+			m.FilteredEvents = m.FilterView.ApplyFilters(m.Events)
+			updateListWithEvents(&m, m.FilteredEvents)
+		} else {
+			// No filters, show all events
+			updateListWithEvents(&m, m.Events)
 		}
-		m.List.SetItems(listItems)
 
 		// Auto-scroll if enabled
-		if m.ShouldAutoScroll && !m.ShowingDetail {
-			m.List.Select(len(m.Events) - 1)
+		if m.ShouldAutoScroll && !m.ShowingDetail && !m.ShowingFilter {
+			m.List.Select(len(m.List.Items()) - 1)
 		}
 
 		cmds = append(cmds, CheckForEvents(m.EventChan))
@@ -224,20 +243,44 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, Keys.ToggleAutoScroll):
 			m.ShouldAutoScroll = !m.ShouldAutoScroll
-			if m.ShouldAutoScroll && !m.ShowingDetail {
+			if m.ShouldAutoScroll && !m.ShowingDetail && !m.ShowingFilter {
 				m.List.Select(len(m.Events) - 1)
 			}
 
 		case key.Matches(msg, Keys.Help):
 			m.Help.ShowAll = !m.Help.ShowAll
 
+		case key.Matches(msg, Keys.ToggleFilter):
+			if !m.ShowingDetail {
+				// Toggle filter view
+				m.ShowingFilter = !m.ShowingFilter
+				eventHandled = true
+			}
+
+		case key.Matches(msg, Keys.ApplyFilter):
+			if m.ShowingFilter {
+				// Apply the current filters
+				// Get filter state and apply it
+				m.FilteredEvents = m.FilterView.ApplyFilters(m.Events)
+				
+				// Update the list view with filtered events
+				updateListWithEvents(&m, m.FilteredEvents)
+				
+				// Exit filter view
+				m.ShowingFilter = false
+				eventHandled = true
+			}
+
 		case key.Matches(msg, Keys.Back):
 			if m.ShowingDetail {
 				m.ShowingDetail = false
 				m.CurrentEvent = nil
 				m.Expanded = make(map[string]bool) // Reset expanded sections
+				eventHandled = true
+			} else if m.ShowingFilter {
+				m.ShowingFilter = false
+				eventHandled = true
 			}
-			eventHandled = true
 
 		case key.Matches(msg, Keys.Select):
 			if !m.ShowingDetail {
@@ -284,13 +327,20 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if !eventHandled {
-		if !m.ShowingDetail {
+		if m.ShowingFilter {
+			// Update filter view
 			var cmd tea.Cmd
-			m.List, cmd = m.List.Update(msg)
+			m.FilterView, cmd = m.FilterView.Update(msg)
 			cmds = append(cmds, cmd)
-		} else {
+		} else if m.ShowingDetail {
+			// Update detail view
 			var cmd tea.Cmd
 			m.Viewport, cmd = m.Viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		} else {
+			// Update list view
+			var cmd tea.Cmd
+			m.List, cmd = m.List.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -301,7 +351,29 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// Helper function to update the list with events (filtered or unfiltered)
+func updateListWithEvents(m *ViewModel, events []model.Event) {
+	listItems := make([]list.Item, len(events))
+	for i, e := range events {
+		listItems[i] = EventItem{
+			ID:        e.EventID,
+			Timestamp: e.Timestamp,
+			EventType: e.EventType,
+			RunID:     e.RunID,
+			Event:     e,
+			registry:  m.ViewRegistry,
+		}
+	}
+	m.List.SetItems(listItems)
+}
+
 func (m ViewModel) View() string {
+	// If in filter mode, show the filter view
+	if m.ShowingFilter {
+		return m.FilterView.View()
+	}
+
+	// If in detail mode, show the detail view
 	if m.ShowingDetail {
 		// Check if the current event has expandable fields
 		expandableHelp := ""

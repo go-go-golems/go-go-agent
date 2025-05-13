@@ -14,6 +14,10 @@ type EventView interface {
 	Render(event model.Event, expanded map[string]bool) (string, error)
 	// ExpandableFields returns a list of field names that can be expanded/collapsed
 	ExpandableFields() []string
+	// FormatListTitle returns a custom title for the list view
+	FormatListTitle(event model.Event) string
+	// FormatListDescription returns a custom description for the list view
+	FormatListDescription(event model.Event) string
 }
 
 // Default view implements EventView for generic events
@@ -49,6 +53,15 @@ func (d *DefaultView) ExpandableFields() []string {
 	return []string{} // No expandable fields in default view
 }
 
+func (d *DefaultView) FormatListTitle(event model.Event) string {
+	return event.EventType
+}
+
+func (d *DefaultView) FormatListDescription(event model.Event) string {
+	return fmt.Sprintf("ID: %s | Time: %s | Run: %s",
+		event.EventID, event.Timestamp, event.RunID)
+}
+
 // Registry maintains a mapping from event types to their custom views
 type Registry struct {
 	views       map[string]EventView
@@ -81,4 +94,16 @@ func (r *Registry) GetView(eventType string) EventView {
 func (r *Registry) FormatEvent(event model.Event, expanded map[string]bool) (string, error) {
 	view := r.GetView(event.EventType)
 	return view.Render(event, expanded)
+}
+
+// FormatListTitle returns the custom title for list view using the appropriate view
+func (r *Registry) FormatListTitle(event model.Event) string {
+	view := r.GetView(event.EventType)
+	return view.FormatListTitle(event)
+}
+
+// FormatListDescription returns the custom description for list view using the appropriate view
+func (r *Registry) FormatListDescription(event model.Event) string {
+	view := r.GetView(event.EventType)
+	return view.FormatListDescription(event)
 }

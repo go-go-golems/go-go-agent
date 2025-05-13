@@ -22,10 +22,22 @@ type EventItem struct {
 	EventType string
 	RunID     string
 	Event     model.Event
+	registry  *views.Registry // View registry reference
 }
 
-func (i EventItem) Title() string { return i.EventType }
+func (i EventItem) Title() string {
+	// Use the registry to format the title if available
+	if i.registry != nil {
+		return i.registry.FormatListTitle(i.Event)
+	}
+	return i.EventType
+}
+
 func (i EventItem) Description() string {
+	// Use the registry to format the description if available
+	if i.registry != nil {
+		return i.registry.FormatListDescription(i.Event)
+	}
 	return fmt.Sprintf("ID: %s | Time: %s | Run: %s",
 		i.ID, i.Timestamp, i.RunID)
 }
@@ -192,6 +204,7 @@ func (m ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				EventType: e.EventType,
 				RunID:     e.RunID,
 				Event:     e,
+				registry:  m.ViewRegistry,
 			}
 		}
 		m.List.SetItems(listItems)

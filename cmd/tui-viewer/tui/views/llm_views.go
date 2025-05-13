@@ -21,6 +21,31 @@ var (
 // LLMCallStartedView implements EventView for LLM call started events
 type LLMCallStartedView struct{}
 
+func (v *LLMCallStartedView) FormatListTitle(event model.Event) string {
+	var payload model.LLMCallStartedPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return event.EventType
+	}
+	return fmt.Sprintf("📝 LLM Call [%s]", payload.Model)
+}
+
+func (v *LLMCallStartedView) FormatListDescription(event model.Event) string {
+	var payload model.LLMCallStartedPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return fmt.Sprintf("ID: %s | Time: %s", event.EventID, event.Timestamp)
+	}
+
+	// Prepare a summary of the prompt preview
+	preview := payload.PromptPreview
+	if len(preview) > 60 {
+		preview = preview[:57] + "..."
+	}
+
+	return fmt.Sprintf("%s | %s",
+		payload.AgentClass,
+		strings.ReplaceAll(preview, "\n", " "))
+}
+
 func (v *LLMCallStartedView) ExpandableFields() []string {
 	return []string{"prompt"}
 }
@@ -101,6 +126,84 @@ func (v *LLMCallStartedView) Render(event model.Event, expanded map[string]bool)
 // LLMCallCompletedView implements EventView for LLM call completed events
 type LLMCallCompletedView struct{}
 
+func (v *LLMCallCompletedView) FormatListTitle(event model.Event) string {
+	var payload model.LLMCallCompletedPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return event.EventType
+	}
+
+	// Add an icon to show status (error or success)
+	prefix := "💬" // Speech bubble for success
+	if payload.Error != nil {
+		prefix = "❌" // Red X for error
+	}
+
+	// Extract token usage if available
+	tokenInfo := ""
+	if len(payload.TokenUsage) > 0 {
+		var tokenUsage map[string]interface{}
+		if err := json.Unmarshal(payload.TokenUsage, &tokenUsage); err == nil {
+			// Try to extract common token count fields
+			var totalTokens int
+			var inputTokens, outputTokens int
+
+			// Handle different token usage formats
+			if total, ok := tokenUsage["total_tokens"].(float64); ok {
+				totalTokens = int(total)
+			}
+			if prompt, ok := tokenUsage["prompt_tokens"].(float64); ok {
+				inputTokens = int(prompt)
+			} else if input, ok := tokenUsage["input_tokens"].(float64); ok {
+				inputTokens = int(input)
+			}
+			if completion, ok := tokenUsage["completion_tokens"].(float64); ok {
+				outputTokens = int(completion)
+			} else if output, ok := tokenUsage["output_tokens"].(float64); ok {
+				outputTokens = int(output)
+			}
+
+			// Format token information
+			if totalTokens > 0 {
+				tokenInfo = fmt.Sprintf(" [%d tokens]", totalTokens)
+			} else if inputTokens > 0 || outputTokens > 0 {
+				tokenInfo = fmt.Sprintf(" [%d→%d tokens]", inputTokens, outputTokens)
+			}
+		}
+	}
+
+	return fmt.Sprintf("%s LLM Response [%s] %.1fs%s",
+		prefix, payload.Model, payload.DurationSeconds, tokenInfo)
+}
+
+func (v *LLMCallCompletedView) FormatListDescription(event model.Event) string {
+	var payload model.LLMCallCompletedPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return fmt.Sprintf("ID: %s | Time: %s", event.EventID, event.Timestamp)
+	}
+
+	// Show error message if present
+	if payload.Error != nil {
+		return fmt.Sprintf("ERROR: %s", *payload.Error)
+	}
+
+	// Show summary or start of response
+	if payload.ResultSummary != "" {
+		summary := payload.ResultSummary
+		if len(summary) > 60 {
+			summary = summary[:57] + "..."
+		}
+		return strings.ReplaceAll(summary, "\n", " ")
+	} else if payload.Response != "" {
+		resp := payload.Response
+		if len(resp) > 60 {
+			resp = resp[:57] + "..."
+		}
+		return strings.ReplaceAll(resp, "\n", " ")
+	}
+
+	return fmt.Sprintf("%s | Complete", payload.AgentClass)
+}
+
 func (v *LLMCallCompletedView) ExpandableFields() []string {
 	return []string{"response", "token_usage"}
 }
@@ -167,9 +270,44 @@ func (v *LLMCallCompletedView) Render(event model.Event, expanded map[string]boo
 	// Token usage (expandable)
 	isTokenUsageExpanded := expanded["token_usage"]
 	if len(payload.TokenUsage) > 0 {
-		expandHeader := "[+] Token Usage (press 'e' to expand)"
+		// First extract and show a token summary
+		var tokenUsage map[string]interface{}
+		if err := json.Unmarshal(payload.TokenUsage, &tokenUsage); err == nil {
+			// Try to extract common token count fields
+			var totalTokens int
+			var inputTokens, outputTokens int
+
+			// Handle different token usage formats
+			if total, ok := tokenUsage["total_tokens"].(float64); ok {
+				totalTokens = int(total)
+			}
+			if prompt, ok := tokenUsage["prompt_tokens"].(float64); ok {
+				inputTokens = int(prompt)
+			} else if input, ok := tokenUsage["input_tokens"].(float64); ok {
+				inputTokens = int(input)
+			}
+			if completion, ok := tokenUsage["completion_tokens"].(float64); ok {
+				outputTokens = int(completion)
+			} else if output, ok := tokenUsage["output_tokens"].(float64); ok {
+				outputTokens = int(output)
+			}
+
+			// Display token summary
+			if totalTokens > 0 {
+				fmt.Fprintf(sb, "\n%s: %d\n", fieldStyle.Render("Total Tokens"), totalTokens)
+			} else if inputTokens > 0 || outputTokens > 0 {
+				fmt.Fprintf(sb, "\n%s: %d %s %d = %d\n",
+					fieldStyle.Render("Tokens"),
+					inputTokens,
+					lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Render("→"),
+					outputTokens,
+					inputTokens+outputTokens)
+			}
+		}
+
+		expandHeader := "[+] Token Usage Details (press 'e' to expand)"
 		if isTokenUsageExpanded {
-			expandHeader = "[-] Token Usage (press 'e' to collapse)"
+			expandHeader = "[-] Token Usage Details (press 'e' to collapse)"
 
 			// Parse token usage
 			var tokenUsage interface{}

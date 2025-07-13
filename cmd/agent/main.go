@@ -8,6 +8,7 @@ import (
 	"github.com/go-go-golems/clay/pkg/doc"
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
 	"github.com/go-go-golems/glazed/pkg/help"
+	help_cmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +38,7 @@ It supports various agent types like ReAct, Plan-and-Execute, and File Collectio
 	cobra.CheckErr(err)
 
 	// Setup help system
-	helpSystem.SetupCobraRootCommand(rootCmd)
+	help_cmd.SetupCobraRootCommand(helpSystem, rootCmd)
 
 	// Load repository commands
 	repoPath := "/home/manuel/code/wesen/corporate-headquarters/go-go-agent/goagent/examples/commands"

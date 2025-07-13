@@ -15,6 +15,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
 	"github.com/go-go-golems/glazed/pkg/help"
+	help_cmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	"github.com/go-go-golems/go-go-agent/goagent/agent" // Import our agent implementation
 	"github.com/go-go-golems/go-go-agent/goagent/llm"
 	pinocchio_cmds "github.com/go-go-golems/pinocchio/pkg/cmds"
@@ -209,7 +210,7 @@ func main() {
 		return logging.InitLoggerFromViper()
 	}
 
-	helpSystem.SetupCobraRootCommand(cobraCmd)
+	help_cmd.SetupCobraRootCommand(helpSystem, cobraCmd)
 
 	// Initialize Viper once initially for config loading
 	err = clay.InitViper("pinocchio", cobraCmd)

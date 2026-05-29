@@ -65,3 +65,11 @@ generate-proto:
 # Clean generated files
 clean:
 	rm -rf pkg/events/*.pb.go
+
+.PHONY: logcopter-generate
+logcopter-generate:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.go-go-agent -strip-prefix github.com/go-go-golems/go-go-agent ./cmd/... ./pkg/...
+
+.PHONY: logcopter-check
+logcopter-check:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.go-go-agent -strip-prefix github.com/go-go-golems/go-go-agent -check ./cmd/... ./pkg/...

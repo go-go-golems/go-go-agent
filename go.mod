@@ -1,6 +1,6 @@
 module github.com/go-go-golems/go-go-agent
 
-go 1.24.2
+go 1.26.3
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.6
@@ -9,6 +9,7 @@ require (
 	github.com/go-go-golems/geppetto v0.4.50
 	github.com/go-go-golems/glazed v0.5.48
 	github.com/go-go-golems/go-emrichen v0.0.7
+	github.com/go-go-golems/logcopter v0.1.0
 	github.com/go-go-golems/pinocchio v0.4.33
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -16,12 +17,12 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.8.0
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.1
 	github.com/sashabaranov/go-openai v1.39.0
 	github.com/spf13/cobra v1.9.1
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
-	golang.org/x/sync v0.13.0
+	golang.org/x/sync v0.20.0
 	google.golang.org/protobuf v1.36.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -116,13 +117,17 @@ require (
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
 	go.mongodb.org/mongo-driver v1.14.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/term v0.31.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/client-go v0.29.1 // indirect
 )
+
+tool github.com/go-go-golems/logcopter/cmd/logcopter-gen

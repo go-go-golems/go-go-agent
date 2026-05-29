@@ -366,7 +366,7 @@ func prettyPrintEvent(event *events.Event) (string, error) {
 	if payloadProto != nil {
 		payloadBytes, err := opts.Marshal(payloadProto)
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("  Error marshalling payload: %v\n", err))
+			fmt.Fprintf(&sb, "  Error marshalling payload: %v\n", err)
 		} else {
 			// Indent the payload JSON
 			scanner := bufio.NewScanner(bytes.NewReader(payloadBytes))
@@ -376,7 +376,7 @@ func prettyPrintEvent(event *events.Event) (string, error) {
 				sb.WriteString("\n")
 			}
 			if err := scanner.Err(); err != nil {
-				sb.WriteString(fmt.Sprintf("  Error reading marshalled payload: %v\n", err))
+				fmt.Fprintf(&sb, "  Error reading marshalled payload: %v\n", err)
 			}
 		}
 	} else {

@@ -193,13 +193,13 @@ func (a *FileCollectionAgent) buildSummary(savedToDisk bool) string {
 	var sb strings.Builder
 
 	if savedToDisk {
-		sb.WriteString(fmt.Sprintf("Saved %d files to %s:\n", len(a.files), a.settings.DestinationDirectory))
+		fmt.Fprintf(&sb, "Saved %d files to %s:\n", len(a.files), a.settings.DestinationDirectory)
 		for name, content := range a.files {
 			// Simple byte count for size
-			sb.WriteString(fmt.Sprintf("- %s (%d bytes)\n", name, len(content)))
+			fmt.Fprintf(&sb, "- %s (%d bytes)\n", name, len(content))
 		}
 	} else {
-		sb.WriteString(fmt.Sprintf("Generated %d files:\n\n", len(a.files)))
+		fmt.Fprintf(&sb, "Generated %d files:\n\n", len(a.files))
 		for name, content := range a.files {
 			// Determine language for syntax highlighting if possible (simple check)
 			lang := ""

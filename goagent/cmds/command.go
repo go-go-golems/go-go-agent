@@ -308,12 +308,12 @@ func StdoutEventHandler(msg *message.Message) ([]*message.Message, error) {
 // prettyPrintEvent formats an event for readable stdout logging.
 func prettyPrintEvent(event *events.Event) (string, error) {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("---\nEvent ID: %s\nRun ID:   %s\nType:     %s\nTime:     %s\nPayload:\n",
+	fmt.Fprintf(&sb, "---\nEvent ID: %s\nRun ID:   %s\nType:     %s\nTime:     %s\nPayload:\n",
 		event.EventId,
 		*event.RunId, // Assume RunId is always set when handled here
 		event.EventType.String(),
 		event.GetTimestamp().AsTime().Format(time.RFC3339Nano),
-	))
+	)
 
 	// Use protojson marshaller for readable payload output
 	opts := protojson.MarshalOptions{

@@ -207,7 +207,7 @@ func (a *FileCollectionAgent) buildSummary(savedToDisk bool) string {
 			if len(splitName) > 1 {
 				lang = splitName[len(splitName)-1]
 			}
-			sb.WriteString(fmt.Sprintf("**%s**\n```%s\n", name, lang))
+			fmt.Fprintf(&sb, "**%s**\n```%s\n", name, lang)
 			sb.WriteString(content)
 			sb.WriteString("\n```\n\n")
 		}

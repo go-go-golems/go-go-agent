@@ -183,28 +183,28 @@ func (a *ReActAgent) formatHistoryForPrompt(ctx context.Context) (string, error)
 		// Simple formatting, similar to scratchpad
 		switch role {
 		case "user":
-			history.WriteString(fmt.Sprintf("Prompt: %s\n", content)) // Distinguish initial prompt?
+			fmt.Fprintf(&history, "Prompt: %s\n", content) // Distinguish initial prompt?
 		case "assistant":
 			// Check if it was a thought or action or final answer based on content patterns
 			if strings.HasPrefix(content, "Thought: ") {
-				history.WriteString(fmt.Sprintf("%s\n", content))
+				fmt.Fprintf(&history, "%s\n", content)
 			} else if strings.HasPrefix(content, "Action: ") {
-				history.WriteString(fmt.Sprintf("%s\n", content))
+				fmt.Fprintf(&history, "%s\n", content)
 			} else if strings.HasPrefix(content, "Final Answer: ") {
-				history.WriteString(fmt.Sprintf("%s\n", content))
+				fmt.Fprintf(&history, "%s\n", content)
 			} else {
-				history.WriteString(fmt.Sprintf("LLM Response: %s\n", content))
+				fmt.Fprintf(&history, "LLM Response: %s\n", content)
 			}
 		case "tool":
 			// Extract tool name if possible from content like "Observation [tool]: result"
-			history.WriteString(fmt.Sprintf("Observation: %s\n", content)) // Simplify for now
+			fmt.Fprintf(&history, "Observation: %s\n", content) // Simplify for now
 		case "system":
 			// Maybe include system messages like errors?
 			if strings.HasPrefix(content, "Error parsing response") || strings.HasPrefix(content, "Tool Error") {
-				history.WriteString(fmt.Sprintf("%s\n", content))
+				fmt.Fprintf(&history, "%s\n", content)
 			}
 		default:
-			history.WriteString(fmt.Sprintf("%s: %s\n", role, content))
+			fmt.Fprintf(&history, "%s: %s\n", role, content)
 		}
 	}
 	return history.String(), nil

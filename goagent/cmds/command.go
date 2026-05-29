@@ -308,12 +308,12 @@ func StdoutEventHandler(msg *message.Message) ([]*message.Message, error) {
 // prettyPrintEvent formats an event for readable stdout logging.
 func prettyPrintEvent(event *events.Event) (string, error) {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("---\nEvent ID: %s\nRun ID:   %s\nType:     %s\nTime:     %s\nPayload:\n",
+	fmt.Fprintf(&sb, "---\nEvent ID: %s\nRun ID:   %s\nType:     %s\nTime:     %s\nPayload:\n",
 		event.EventId,
 		*event.RunId, // Assume RunId is always set when handled here
 		event.EventType.String(),
 		event.GetTimestamp().AsTime().Format(time.RFC3339Nano),
-	))
+	)
 
 	// Use protojson marshaller for readable payload output
 	opts := protojson.MarshalOptions{
@@ -366,7 +366,7 @@ func prettyPrintEvent(event *events.Event) (string, error) {
 	if payloadProto != nil {
 		payloadBytes, err := opts.Marshal(payloadProto)
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("  Error marshalling payload: %v\n", err))
+			fmt.Fprintf(&sb, "  Error marshalling payload: %v\n", err)
 		} else {
 			// Indent the payload JSON
 			scanner := bufio.NewScanner(bytes.NewReader(payloadBytes))
@@ -376,7 +376,7 @@ func prettyPrintEvent(event *events.Event) (string, error) {
 				sb.WriteString("\n")
 			}
 			if err := scanner.Err(); err != nil {
-				sb.WriteString(fmt.Sprintf("  Error reading marshalled payload: %v\n", err))
+				fmt.Fprintf(&sb, "  Error reading marshalled payload: %v\n", err)
 			}
 		}
 	} else {
